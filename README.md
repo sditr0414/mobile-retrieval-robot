@@ -1,4 +1,4 @@
-# Mobile Retrieval Robot
+# Mobile Retrieval Robot — 스마트 물품 회수·운반 로봇
 
 > **STM32F411 기반 5자유도 로봇팔 + 4WD 물품 회수·운반 이동 로봇**
 
