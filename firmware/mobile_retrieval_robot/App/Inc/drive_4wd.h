@@ -19,4 +19,7 @@ void Drive4WD_CheckTimeout(void);
 /* Flash 작업 중에는 차량을 정지하고 새 주행 명령을 적용하지 않는다. */
 void Drive4WD_SetStorageInhibit(uint8_t inhibit);
 
+/* 로봇팔이 움직이는 동안 차량을 정지하고 새 주행 명령을 적용하지 않는다. */
+void Drive4WD_SetArmMotionInhibit(uint8_t inhibit);
+
 #endif /* DRIVE_4WD_H */

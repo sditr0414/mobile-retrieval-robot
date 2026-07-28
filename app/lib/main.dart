@@ -12,8 +12,11 @@ void main() {
     DeviceOrientation.landscapeRight,
   ]).then((_) {
     runApp(
-      ChangeNotifierProvider(
-        create: (context) => BluetoothController(),
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (_) => BluetoothController()),
+          ChangeNotifierProvider(create: (_) => TeachingController()),
+        ],
         child: const RobotApp(),
       ),
     );
@@ -28,10 +31,7 @@ class RobotApp extends StatelessWidget {
     return MaterialApp(
       title: 'RC & Robot Controller',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        primarySwatch: Colors.blueGrey,
-        useMaterial3: true,
-      ),
+      theme: ThemeData(primarySwatch: Colors.blueGrey, useMaterial3: true),
       home: const MainScreen(),
     );
   }
@@ -80,21 +80,26 @@ class BluetoothController with ChangeNotifier {
 
     try {
       connection = await _bluetooth.connect(address: device.address);
-      debugPrint("✅ HC-05 연결 성공: ${device.name ?? 'Unknown'} (${device.address})");
+      debugPrint(
+        "✅ HC-05 연결 성공: ${device.name ?? 'Unknown'} (${device.address})",
+      );
       isConnecting = false;
       isEstopLatched = true;
       isArmEnabled = false;
       notifyListeners();
 
-      connection?.input.listen((Uint8List data) {
-        _handleIncomingData(data);
-      }, onDone: () {
-        debugPrint("원격 기기와의 연결이 종료되었습니다.");
-        connection = null;
-        isEstopLatched = true;
-        isArmEnabled = false;
-        notifyListeners();
-      });
+      connection?.input.listen(
+        (Uint8List data) {
+          _handleIncomingData(data);
+        },
+        onDone: () {
+          debugPrint("원격 기기와의 연결이 종료되었습니다.");
+          connection = null;
+          isEstopLatched = true;
+          isArmEnabled = false;
+          notifyListeners();
+        },
+      );
     } catch (e) {
       debugPrint("연결 에러: $e");
       connection = null;
@@ -154,9 +159,7 @@ class BluetoothController with ChangeNotifier {
               : "로봇팔 활성화 실패: ${_armFailureMessage(reason)}";
         } else if (command == 2) {
           isArmEnabled = false;
-          lastAckMessage = succeeded
-              ? "로봇팔 출력을 차단했습니다."
-              : "로봇팔 출력 차단에 실패했습니다.";
+          lastAckMessage = succeeded ? "로봇팔 출력을 차단했습니다." : "로봇팔 출력 차단에 실패했습니다.";
         } else if (!succeeded) {
           lastAckMessage = "로봇팔 이동 실패: ${_armFailureMessage(reason)}";
         }
@@ -224,9 +227,7 @@ class BluetoothController with ChangeNotifier {
       // 아직 전송하지 않은 일반 명령은 취소하고 E-STOP을 맨 앞에 둔다.
       for (final queued in _writeQueue) {
         if (!queued.completer.isCompleted) {
-          queued.completer.completeError(
-            StateError("긴급 정지로 대기 패킷이 취소되었습니다."),
-          );
+          queued.completer.completeError(StateError("긴급 정지로 대기 패킷이 취소되었습니다."));
         }
       }
       _writeQueue
@@ -298,23 +299,17 @@ class BluetoothController with ChangeNotifier {
     }
     int checksum = sum % 256;
 
-    List<int> packet = [
-      0xAA,
-      mode,
-      ...payload,
-      checksum,
-      0x55
-    ];
+    List<int> packet = [0xAA, mode, ...payload, checksum, 0x55];
 
-    return sendPacket(
-      packet,
-      urgent: urgent,
-      replacePending: replacePending,
-    );
+    return sendPacket(packet, urgent: urgent, replacePending: replacePending);
   }
 
   Future<void> sendDrive(
-      int leftDirection, int leftPwm, int rightDirection, int rightPwm) {
+    int leftDirection,
+    int leftPwm,
+    int rightDirection,
+    int rightPwm,
+  ) {
     if (!isConnected || isEstopLatched) {
       return Future<void>.value();
     }
@@ -332,11 +327,7 @@ class BluetoothController with ChangeNotifier {
 
     // Control=1은 펌웨어에서 차량 정지 잠금과 로봇팔 출력을 함께 끈다.
     try {
-      await sendCommand(
-        0,
-        data: [0, 0, 0, 0, 1],
-        urgent: true,
-      );
+      await sendCommand(0, data: [0, 0, 0, 0, 1], urgent: true);
     } catch (error) {
       debugPrint("비상정지 패킷 전송 실패: $error");
     }
@@ -369,11 +360,7 @@ class BluetoothController with ChangeNotifier {
     if (!isConnected || !isArmEnabled || isEstopLatched) {
       return Future<void>.value();
     }
-    return sendCommand(
-      1,
-      data: [...angles, 0],
-      replacePending: true,
-    );
+    return sendCommand(1, data: [...angles, 0], replacePending: true);
   }
 
   Future<bool> waitForTeachingAck(int sequenceId) {
@@ -385,15 +372,123 @@ class BluetoothController with ChangeNotifier {
     _teachingAckCompleter = completer;
     _teachingAckSequence = sequenceId;
 
-    return completer.future.timeout(
-      const Duration(seconds: 5),
-      onTimeout: () => false,
-    ).whenComplete(() {
-      if (_teachingAckCompleter == completer) {
-        _teachingAckCompleter = null;
-        _teachingAckSequence = null;
+    return completer.future
+        .timeout(const Duration(seconds: 5), onTimeout: () => false)
+        .whenComplete(() {
+          if (_teachingAckCompleter == completer) {
+            _teachingAckCompleter = null;
+            _teachingAckSequence = null;
+          }
+        });
+  }
+}
+
+// ======================================================
+// 티칭 시퀀스와 웨이포인트 상태 관리자
+// ======================================================
+class TeachingController with ChangeNotifier {
+  static const int sequenceCount = 12;
+  static const int maxWaypoints = 30;
+
+  int _selectedSequence = 1;
+  bool _uploading = false;
+  final List<List<List<int>>> _sequenceWaypoints = List.generate(
+    sequenceCount,
+    (_) => [],
+  );
+
+  int get selectedSequence => _selectedSequence;
+  bool get isUploading => _uploading;
+  String get selectedSequenceName => '시퀀스 $_selectedSequence';
+  List<List<int>> get currentWaypoints =>
+      _sequenceWaypoints[_selectedSequence - 1];
+
+  void selectSequence(int sequence) {
+    if (_uploading || sequence < 1 || sequence > sequenceCount) {
+      return;
+    }
+    _selectedSequence = sequence;
+    notifyListeners();
+  }
+
+  bool addCurrentPose(List<int> pose) {
+    if (_uploading || currentWaypoints.length >= maxWaypoints) {
+      return false;
+    }
+    currentWaypoints.add(List<int>.from(pose));
+    notifyListeners();
+    return true;
+  }
+
+  void removeWaypoint(int index) {
+    if (_uploading || index < 0 || index >= currentWaypoints.length) {
+      return;
+    }
+    currentWaypoints.removeAt(index);
+    notifyListeners();
+  }
+
+  void clearCurrentSequence() {
+    if (_uploading) {
+      return;
+    }
+    currentWaypoints.clear();
+    notifyListeners();
+  }
+
+  Future<String?> uploadToSTM32(BluetoothController bluetooth) async {
+    if (_uploading) {
+      return null;
+    }
+    if (!bluetooth.isConnected) {
+      return '먼저 HC-05에 연결해주세요.';
+    }
+    if (currentWaypoints.isEmpty) {
+      return '업로드할 웨이포인트가 없습니다.';
+    }
+
+    final int sequenceId = _selectedSequence;
+    final List<List<int>> waypoints = currentWaypoints
+        .map((pose) => List<int>.from(pose))
+        .toList();
+    final Future<bool> ack = bluetooth.waitForTeachingAck(sequenceId);
+
+    _uploading = true;
+    notifyListeners();
+
+    try {
+      await bluetooth.sendCommand(
+        2,
+        data: [4, 1, sequenceId, waypoints.length],
+      );
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      for (int index = 0; index < waypoints.length; index++) {
+        final List<int> pose = waypoints[index];
+        await bluetooth.sendCommand(
+          2,
+          data: [4, 2, sequenceId, index, pose[0], pose[1], pose[2]],
+        );
+        await Future.delayed(const Duration(milliseconds: 30));
+        await bluetooth.sendCommand(
+          2,
+          data: [4, 3, sequenceId, index, pose[3], pose[4], pose[5]],
+        );
+        await Future.delayed(const Duration(milliseconds: 30));
       }
-    });
+
+      await bluetooth.sendCommand(2, data: [4, 4, sequenceId]);
+      final bool succeeded = await ack;
+      if (!succeeded) {
+        return '저장 ACK를 받지 못했거나 Flash 저장에 실패했습니다.';
+      }
+      return null;
+    } catch (error) {
+      return '업로드 전송 실패: $error';
+    } finally {
+      _uploading = false;
+      notifyListeners();
+    }
   }
 }
 
@@ -416,11 +511,30 @@ class _MainScreenState extends State<MainScreen> {
     const TeachingTab(),
   ];
 
-  final List<String> _screenTitles = [
-    'RC카 주행',
-    '로봇팔 조종',
-    '티칭 시스템',
-  ];
+  final List<String> _screenTitles = ['RC카 주행', '로봇팔 조종', '티칭 시스템'];
+
+  Future<void> _selectScreen(int index, BluetoothController bluetooth) async {
+    if (index == _currentIndex) {
+      return;
+    }
+
+    if (index != 0) {
+      setState(() => _currentIndex = index);
+      await bluetooth.sendDrive(0, 0, 0, 0);
+      return;
+    }
+
+    await bluetooth.sendDrive(0, 0, 0, 0);
+    if (bluetooth.isArmEnabled) {
+      RobotArmControlTab.setTravelPose();
+      await bluetooth.sendArmPose(RobotArmControlTab.currentAngles);
+    }
+
+    if (!mounted) {
+      return;
+    }
+    setState(() => _currentIndex = index);
+  }
 
   Future<void> _confirmEstopClear(BluetoothController controller) async {
     final bool? confirmed = await showDialog<bool>(
@@ -446,16 +560,19 @@ class _MainScreenState extends State<MainScreen> {
         await controller.clearEmergencyStop();
       } catch (error) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('비상정지 해제 전송 실패: $error')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('비상정지 해제 전송 실패: $error')));
         }
       }
     }
   }
 
   void _showBluetoothDialog(BuildContext context) {
-    final bltController = Provider.of<BluetoothController>(context, listen: false);
+    final bltController = Provider.of<BluetoothController>(
+      context,
+      listen: false,
+    );
     unawaited(bltController.loadBondedDevices());
 
     showDialog(
@@ -470,8 +587,10 @@ class _MainScreenState extends State<MainScreen> {
               builder: (context, controller, child) {
                 if (controller.bondedDevices.isEmpty) {
                   return const Center(
-                    child: Text('페어링된 기기가 없습니다.\n기기 설정에서 HC-05를 먼저 페어링해주세요.',
-                        textAlign: TextAlign.center),
+                    child: Text(
+                      '페어링된 기기가 없습니다.\n기기 설정에서 HC-05를 먼저 페어링해주세요.',
+                      textAlign: TextAlign.center,
+                    ),
                   );
                 }
                 return ListView.builder(
@@ -479,17 +598,26 @@ class _MainScreenState extends State<MainScreen> {
                   itemBuilder: (context, index) {
                     final device = controller.bondedDevices[index];
                     return ListTile(
-                      title: Text(device.name ?? '알 수 없는 기기', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      title: Text(
+                        device.name ?? '알 수 없는 기기',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
                       subtitle: Text(device.address),
                       trailing: ElevatedButton(
                         onPressed: controller.isConnecting
                             ? null
                             : () {
-                          unawaited(controller.connectToDevice(device));
-                          Navigator.pop(context);
-                        },
+                                unawaited(controller.connectToDevice(device));
+                                Navigator.pop(context);
+                              },
                         child: controller.isConnecting
-                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
                             : const Text('연결'),
                       ),
                     );
@@ -534,7 +662,10 @@ class _MainScreenState extends State<MainScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('${_screenTitles[_currentIndex]} 제어', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+        title: Text(
+          '${_screenTitles[_currentIndex]} 제어',
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+        ),
         backgroundColor: Colors.blueGrey[900],
         foregroundColor: Colors.white,
         actions: [
@@ -542,7 +673,9 @@ class _MainScreenState extends State<MainScreen> {
             padding: const EdgeInsets.symmetric(vertical: 8.0),
             child: ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
-                backgroundColor: isConnected ? Colors.blueAccent : Colors.grey[700],
+                backgroundColor: isConnected
+                    ? Colors.blueAccent
+                    : Colors.grey[700],
                 foregroundColor: Colors.white,
               ),
               onPressed: () {
@@ -552,8 +685,15 @@ class _MainScreenState extends State<MainScreen> {
                   _showBluetoothDialog(context);
                 }
               },
-              icon: Icon(isConnected ? Icons.bluetooth_connected : Icons.bluetooth_searching),
-              label: Text(isConnected ? '연결됨' : '기기 찾기', style: const TextStyle(fontWeight: FontWeight.bold)),
+              icon: Icon(
+                isConnected
+                    ? Icons.bluetooth_connected
+                    : Icons.bluetooth_searching,
+              ),
+              label: Text(
+                isConnected ? '연결됨' : '기기 찾기',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
             ),
           ),
           const SizedBox(width: 10),
@@ -576,7 +716,10 @@ class _MainScreenState extends State<MainScreen> {
               ),
             ),
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 10.0),
+            padding: const EdgeInsets.symmetric(
+              vertical: 8.0,
+              horizontal: 10.0,
+            ),
             child: ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.redAccent,
@@ -587,65 +730,37 @@ class _MainScreenState extends State<MainScreen> {
                 debugPrint("🚨 E-STOP 작동!");
               },
               icon: const Icon(Icons.warning_rounded),
-              label: const Text('E-STOP', style: TextStyle(fontWeight: FontWeight.bold)),
+              label: const Text(
+                'E-STOP',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
             ),
           ),
         ],
       ),
-      drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            const DrawerHeader(
-              decoration: BoxDecoration(color: Colors.blueGrey),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Icon(Icons.precision_manufacturing, color: Colors.white, size: 36),
-                  SizedBox(height: 10),
-                  Text('제어 메뉴', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                ],
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.directions_car),
-              title: const Text('RC카 주행'),
-              selected: _currentIndex == 0,
-              onTap: () {
-                setState(() {
-                  _currentIndex = 0;
-                  unawaited(bltController.sendDrive(0, 0, 0, 0));
-                });
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.precision_manufacturing),
-              title: const Text('로봇팔 조종'),
-              selected: _currentIndex == 1,
-              onTap: () {
-                setState(() {
-                  _currentIndex = 1;
-                  unawaited(bltController.sendDrive(0, 0, 0, 0));
-                });
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.bookmark_added),
-              title: const Text('티칭 시스템'),
-              selected: _currentIndex == 2,
-              onTap: () {
-                setState(() {
-                  _currentIndex = 2;
-                  unawaited(bltController.sendDrive(0, 0, 0, 0));
-                });
-                Navigator.pop(context);
-              },
-            ),
-          ],
-        ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _currentIndex,
+        height: 64,
+        onDestinationSelected: (index) {
+          unawaited(_selectScreen(index, bltController));
+        },
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.directions_car_outlined),
+            selectedIcon: Icon(Icons.directions_car),
+            label: 'RC카 제어',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.precision_manufacturing_outlined),
+            selectedIcon: Icon(Icons.precision_manufacturing),
+            label: '로봇팔 조종',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.bookmark_add_outlined),
+            selectedIcon: Icon(Icons.bookmark_added),
+            label: '티칭 시스템',
+          ),
+        ],
       ),
       body: _screens[_currentIndex],
     );
@@ -686,20 +801,20 @@ class _JoystickTabState extends State<JoystickTab> {
       return;
     }
 
-    unawaited(controller.sendDrive(
-      _leftDirection,
-      _leftPwm,
-      _rightDirection,
-      _rightPwm,
-    ));
+    unawaited(
+      controller.sendDrive(
+        _leftDirection,
+        _leftPwm,
+        _rightDirection,
+        _rightPwm,
+      ),
+    );
   }
 
   void _updateJoystick(double x, double y) {
     final double forward = -y;
-    double leftSpeed =
-        (forward < 0) ? (forward - x) : (forward + x);
-    double rightSpeed =
-        (forward < 0) ? (forward + x) : (forward - x);
+    double leftSpeed = (forward < 0) ? (forward - x) : (forward + x);
+    double rightSpeed = (forward < 0) ? (forward + x) : (forward - x);
 
     leftSpeed = leftSpeed.clamp(-1.0, 1.0).toDouble();
     rightSpeed = rightSpeed.clamp(-1.0, 1.0).toDouble();
@@ -728,8 +843,14 @@ class _JoystickTabState extends State<JoystickTab> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Text('차동 조향(탱크 턴) 조이스틱',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+            const Text(
+              '차동 조향(탱크 턴) 조이스틱',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.blueGrey,
+              ),
+            ),
             const SizedBox(height: 10),
             Joystick(
               mode: JoystickMode.all,
@@ -748,11 +869,7 @@ class _JoystickTabState extends State<JoystickTab> {
 // 3. 탭 2 화면 (로봇팔 수동 조종)
 // ======================================================
 class HoldAngleButton extends StatefulWidget {
-  const HoldAngleButton({
-    required this.icon,
-    required this.onStep,
-    super.key,
-  });
+  const HoldAngleButton({required this.icon, required this.onStep, super.key});
 
   final IconData icon;
   final VoidCallback? onStep;
@@ -816,8 +933,12 @@ class RobotArmControlTab extends StatefulWidget {
   const RobotArmControlTab({super.key});
 
   static const int gripperIndex = 5;
-  static const int homePacketAngle = 90;
-  static List<int> currentAngles = [90, 90, 90, 90, 90, 0];
+  static const List<int> travelPose = [90, 40, 180, 90, 150, 0];
+  static List<int> currentAngles = List<int>.from(travelPose);
+
+  static void setTravelPose() {
+    currentAngles = List<int>.from(travelPose);
+  }
 
   static int packetToDisplayValue(int index, int packetValue) {
     if (index == gripperIndex) {
@@ -834,10 +955,14 @@ class RobotArmControlTab extends StatefulWidget {
   }
 
   static String formatWaypoint(List<int> packetValues) {
-    return packetValues.asMap().entries.map((entry) {
-      final value = packetToDisplayValue(entry.key, entry.value);
-      return entry.key == gripperIndex ? '$value%' : '$value°';
-    }).join(', ');
+    return packetValues
+        .asMap()
+        .entries
+        .map((entry) {
+          final value = packetToDisplayValue(entry.key, entry.value);
+          return entry.key == gripperIndex ? '$value%' : '$value°';
+        })
+        .join(', ');
   }
 
   @override
@@ -845,15 +970,18 @@ class RobotArmControlTab extends StatefulWidget {
 }
 
 class _RobotArmControlTabState extends State<RobotArmControlTab> {
-  final List<String> jointNames = ['Gripper', 'Wrist Rotate', 'Wrist Tilt', 'Elbow', 'Shoulder', 'Base'];
+  final List<String> jointNames = [
+    'Gripper',
+    'Wrist Rotate',
+    'Wrist Tilt',
+    'Elbow',
+    'Shoulder',
+    'Base',
+  ];
 
   void _enableHome(BluetoothController controller) {
     setState(() {
-      RobotArmControlTab.currentAngles = List<int>.filled(
-        6,
-        RobotArmControlTab.homePacketAngle,
-      );
-      RobotArmControlTab.currentAngles[RobotArmControlTab.gripperIndex] = 0;
+      RobotArmControlTab.setTravelPose();
     });
     unawaited(controller.enableArm(RobotArmControlTab.currentAngles));
   }
@@ -866,8 +994,10 @@ class _RobotArmControlTabState extends State<RobotArmControlTab> {
       );
       RobotArmControlTab.currentAngles[originalIndex] = mappedAngle;
 
-      final controller =
-          Provider.of<BluetoothController>(context, listen: false);
+      final controller = Provider.of<BluetoothController>(
+        context,
+        listen: false,
+      );
       unawaited(controller.sendArmPose(RobotArmControlTab.currentAngles));
     });
   }
@@ -877,94 +1007,242 @@ class _RobotArmControlTabState extends State<RobotArmControlTab> {
     final controller = Provider.of<BluetoothController>(context);
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6.0),
-      child: Column(
+      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 6.0),
+      child: Row(
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              Text(
-                controller.isArmEnabled ? '출력 활성화됨' : '출력 차단됨',
-                style: TextStyle(
-                  color: controller.isArmEnabled ? Colors.green : Colors.grey,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(width: 12),
-              FilledButton.icon(
-                onPressed: controller.isEstopLatched
-                    ? null
-                    : () {
-                        if (controller.isArmEnabled) {
-                          unawaited(controller.disableArm());
-                        } else {
-                          _enableHome(controller);
-                        }
-                      },
-                icon: Icon(
-                  controller.isArmEnabled
-                      ? Icons.power_settings_new
-                      : Icons.play_circle_outline,
-                ),
-                label: Text(controller.isArmEnabled ? '출력 끄기' : '홈 자세로 활성화'),
-              ),
-            ],
-          ),
-          ...List.generate(6, (index) {
-          int originalIndex = 5 - index;
-          final isGripper = originalIndex == RobotArmControlTab.gripperIndex;
-          final displayValue = RobotArmControlTab.packetToDisplayValue(
-            originalIndex,
-            RobotArmControlTab.currentAngles[originalIndex],
-          ).toDouble();
-
-          return Expanded(
-            child: Card(
-              margin: const EdgeInsets.symmetric(vertical: 2.0),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                child: Row(
+          Expanded(
+            flex: 6,
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    SizedBox(width: 100, child: Text(jointNames[index], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
-                    HoldAngleButton(
-                      icon: Icons.remove_circle_outline,
-                      onStep: controller.isArmEnabled
-                          ? () => _updateAngle(originalIndex, displayValue - 1)
-                          : null,
-                    ),
-                    Expanded(
-                      child: Slider(
-                        value: displayValue,
-                        min: isGripper ? 0 : -90,
-                        max: isGripper ? 100 : 90,
-                        onChanged: controller.isArmEnabled
-                            ? (value) => _updateAngle(originalIndex, value)
-                            : null,
+                    Text(
+                      controller.isArmEnabled ? '출력 활성화됨' : '출력 차단됨',
+                      style: TextStyle(
+                        color: controller.isArmEnabled
+                            ? Colors.green
+                            : Colors.grey,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                    HoldAngleButton(
-                      icon: Icons.add_circle_outline,
-                      onStep: controller.isArmEnabled
-                          ? () => _updateAngle(originalIndex, displayValue + 1)
-                          : null,
-                    ),
-                    SizedBox(
-                      width: 45,
-                      child: Text(
-                        isGripper
-                            ? '${displayValue.round()}%'
-                            : '${displayValue.round()}°',
-                        textAlign: TextAlign.end,
-                        style: const TextStyle(fontWeight: FontWeight.bold),
+                    const SizedBox(width: 12),
+                    FilledButton.icon(
+                      onPressed: controller.isEstopLatched
+                          ? null
+                          : () {
+                              if (controller.isArmEnabled) {
+                                unawaited(controller.disableArm());
+                              } else {
+                                _enableHome(controller);
+                              }
+                            },
+                      icon: Icon(
+                        controller.isArmEnabled
+                            ? Icons.power_settings_new
+                            : Icons.play_circle_outline,
+                      ),
+                      label: Text(
+                        controller.isArmEnabled ? '출력 끄기' : '홈 자세로 활성화',
                       ),
                     ),
                   ],
                 ),
+                ...List.generate(6, (index) {
+                  int originalIndex = 5 - index;
+                  final isGripper =
+                      originalIndex == RobotArmControlTab.gripperIndex;
+                  final displayValue = RobotArmControlTab.packetToDisplayValue(
+                    originalIndex,
+                    RobotArmControlTab.currentAngles[originalIndex],
+                  ).toDouble();
+
+                  return Expanded(
+                    child: Card(
+                      margin: const EdgeInsets.symmetric(vertical: 2.0),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                        child: Row(
+                          children: [
+                            SizedBox(
+                              width: 100,
+                              child: Text(
+                                jointNames[index],
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                            HoldAngleButton(
+                              icon: Icons.remove_circle_outline,
+                              onStep: controller.isArmEnabled
+                                  ? () => _updateAngle(
+                                      originalIndex,
+                                      displayValue - 1,
+                                    )
+                                  : null,
+                            ),
+                            Expanded(
+                              child: Slider(
+                                value: displayValue,
+                                min: isGripper ? 0 : -90,
+                                max: isGripper ? 100 : 90,
+                                onChanged: controller.isArmEnabled
+                                    ? (value) =>
+                                          _updateAngle(originalIndex, value)
+                                    : null,
+                              ),
+                            ),
+                            HoldAngleButton(
+                              icon: Icons.add_circle_outline,
+                              onStep: controller.isArmEnabled
+                                  ? () => _updateAngle(
+                                      originalIndex,
+                                      displayValue + 1,
+                                    )
+                                  : null,
+                            ),
+                            SizedBox(
+                              width: 45,
+                              child: Text(
+                                isGripper
+                                    ? '${displayValue.round()}%'
+                                    : '${displayValue.round()}°',
+                                textAlign: TextAlign.end,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          const Expanded(flex: 4, child: TeachingEditor(compact: true)),
+        ],
+      ),
+    );
+  }
+}
+
+class TeachingEditor extends StatelessWidget {
+  const TeachingEditor({required this.compact, super.key});
+
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final teaching = Provider.of<TeachingController>(context);
+    final List<List<int>> waypoints = teaching.currentWaypoints;
+
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              '웨이포인트 준비',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.blueGrey,
               ),
             ),
-          );
-          }),
-        ],
+            const SizedBox(height: 4),
+            DropdownButton<int>(
+              isExpanded: true,
+              value: teaching.selectedSequence,
+              items: List.generate(
+                TeachingController.sequenceCount,
+                (index) => DropdownMenuItem<int>(
+                  value: index + 1,
+                  child: Text('시퀀스 ${index + 1}'),
+                ),
+              ),
+              onChanged: teaching.isUploading
+                  ? null
+                  : (value) {
+                      if (value != null) {
+                        teaching.selectSequence(value);
+                      }
+                    },
+            ),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '${teaching.selectedSequenceName} '
+                    '(${waypoints.length}/${TeachingController.maxWaypoints})',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                FilledButton.tonalIcon(
+                  onPressed: teaching.isUploading
+                      ? null
+                      : () {
+                          final bool added = teaching.addCurrentPose(
+                            RobotArmControlTab.currentAngles,
+                          );
+                          if (!added) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('웨이포인트는 최대 30개까지 저장할 수 있습니다.'),
+                              ),
+                            );
+                          }
+                        },
+                  icon: const Icon(Icons.add),
+                  label: const Text('현재 자세 저장'),
+                ),
+              ],
+            ),
+            const Divider(),
+            Expanded(
+              child: waypoints.isEmpty
+                  ? const Center(
+                      child: Text(
+                        '저장된 웨이포인트가 없습니다.\n'
+                        '로봇팔 자세를 조절한 뒤 현재 자세를 저장하세요.',
+                        textAlign: TextAlign.center,
+                      ),
+                    )
+                  : ListView.builder(
+                      itemCount: waypoints.length,
+                      itemBuilder: (context, index) {
+                        final List<int> waypoint = waypoints[index];
+                        return ListTile(
+                          dense: true,
+                          contentPadding: const EdgeInsets.only(left: 8),
+                          title: Text('웨이포인트 #${index + 1}'),
+                          subtitle: Text(
+                            RobotArmControlTab.formatWaypoint(waypoint),
+                            maxLines: compact ? 1 : 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          trailing: IconButton(
+                            tooltip: '삭제',
+                            onPressed: teaching.isUploading
+                                ? null
+                                : () => teaching.removeWaypoint(index),
+                            icon: const Icon(
+                              Icons.delete_outline,
+                              color: Colors.redAccent,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -981,83 +1259,22 @@ class TeachingTab extends StatefulWidget {
 }
 
 class _TeachingTabState extends State<TeachingTab> {
-  int selectedSequence = 1;
-  bool _uploading = false;
-  final List<String> sequenceNames = List.generate(12, (index) => '시퀀스 ${index + 1}');
-
-  final List<List<List<int>>> sequenceWaypoints = List.generate(12, (_) => []);
-
   Future<void> _uploadToSTM32(BluetoothController blt) async {
-    List<List<int>> currentList = sequenceWaypoints[selectedSequence - 1];
-
-    if (_uploading) {
+    final teaching = Provider.of<TeachingController>(context, listen: false);
+    final String? errorMessage = await teaching.uploadToSTM32(blt);
+    if (!mounted || errorMessage == null) {
       return;
     }
-
-    if (!blt.isConnected) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('먼저 HC-05에 연결해주세요.')),
-      );
-      return;
-    }
-
-    if (currentList.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('업로드할 웨이포인트가 없습니다.')));
-      return;
-    }
-
-    setState(() => _uploading = true);
-    final int sequenceId = selectedSequence;
-    final Future<bool> ack = blt.waitForTeachingAck(sequenceId);
-
-    try {
-      // START 뒤 각 조각을 순서대로 보내 armQueue가 넘치지 않게 짧게 간격을 둔다.
-      await blt.sendCommand(
-        2,
-        data: [4, 1, sequenceId, currentList.length],
-      );
-      await Future.delayed(const Duration(milliseconds: 50));
-
-      for (int i = 0; i < currentList.length; i++) {
-        final List<int> angles = currentList[i];
-        await blt.sendCommand(
-          2,
-          data: [4, 2, sequenceId, i, angles[0], angles[1], angles[2]],
-        );
-        await Future.delayed(const Duration(milliseconds: 30));
-        await blt.sendCommand(
-          2,
-          data: [4, 3, sequenceId, i, angles[3], angles[4], angles[5]],
-        );
-        await Future.delayed(const Duration(milliseconds: 30));
-      }
-
-      await blt.sendCommand(2, data: [4, 4, sequenceId]);
-      final bool succeeded = await ack;
-      if (!succeeded && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('저장 ACK를 받지 못했거나 Flash 저장에 실패했습니다.'),
-          ),
-        );
-      }
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('업로드 전송 실패: $error')),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _uploading = false);
-      }
-    }
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(errorMessage)));
   }
 
   @override
   Widget build(BuildContext context) {
     final bltController = Provider.of<BluetoothController>(context);
-    List<List<int>> currentWaypoints = sequenceWaypoints[selectedSequence - 1];
+    final teaching = Provider.of<TeachingController>(context);
+    final List<List<int>> currentWaypoints = teaching.currentWaypoints;
 
     return Padding(
       padding: const EdgeInsets.all(8.0),
@@ -1075,49 +1292,83 @@ class _TeachingTabState extends State<TeachingTab> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('📌 ${sequenceNames[selectedSequence - 1]} 웨이포인트 (${currentWaypoints.length}/30)',
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.blueGrey)),
+                        Text(
+                          '📌 ${teaching.selectedSequenceName} 웨이포인트 '
+                          '(${currentWaypoints.length}/${TeachingController.maxWaypoints})',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            color: Colors.blueGrey,
+                          ),
+                        ),
                         IconButton(
-                          icon: const Icon(Icons.add_circle, color: Colors.blueAccent),
-                          onPressed: _uploading ? null : () {
-                            if (currentWaypoints.length < 30) {
-                              setState(() {
-                                currentWaypoints.add(List.from(RobotArmControlTab.currentAngles));
-                              });
-                            }
-                          },
-                        )
+                          icon: const Icon(
+                            Icons.add_circle,
+                            color: Colors.blueAccent,
+                          ),
+                          onPressed: teaching.isUploading
+                              ? null
+                              : () {
+                                  final bool added = teaching.addCurrentPose(
+                                    RobotArmControlTab.currentAngles,
+                                  );
+                                  if (!added) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          '웨이포인트는 최대 30개까지 저장할 수 있습니다.',
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                },
+                        ),
                       ],
                     ),
                     const Divider(height: 1),
                     Expanded(
                       child: currentWaypoints.isEmpty
-                          ? const Center(child: Text('추가된 웨이포인트가 없습니다.\n+ 버튼을 눌러 현재 위치를 저장하세요.', textAlign: TextAlign.center))
+                          ? const Center(
+                              child: Text(
+                                '추가된 웨이포인트가 없습니다.\n+ 버튼을 눌러 현재 위치를 저장하세요.',
+                                textAlign: TextAlign.center,
+                              ),
+                            )
                           : ListView.builder(
-                        itemCount: currentWaypoints.length,
-                        itemBuilder: (context, index) {
-                          List<int> wp = currentWaypoints[index];
-                          return Card(
-                            color: Colors.grey.shade100,
-                            margin: const EdgeInsets.symmetric(vertical: 3),
-                            child: ListTile(
-                              dense: true,
-                              title: Text('웨이포인트 #${index + 1}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                              subtitle: Text(
-                                '값: [${RobotArmControlTab.formatWaypoint(wp)}]',
-                              ),
-                               trailing: IconButton(
-                                 icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 18),
-                                 onPressed: _uploading ? null : () {
-                                  setState(() {
-                                    currentWaypoints.removeAt(index);
-                                  });
-                                },
-                              ),
+                              itemCount: currentWaypoints.length,
+                              itemBuilder: (context, index) {
+                                List<int> wp = currentWaypoints[index];
+                                return Card(
+                                  color: Colors.grey.shade100,
+                                  margin: const EdgeInsets.symmetric(
+                                    vertical: 3,
+                                  ),
+                                  child: ListTile(
+                                    dense: true,
+                                    title: Text(
+                                      '웨이포인트 #${index + 1}',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    subtitle: Text(
+                                      '값: [${RobotArmControlTab.formatWaypoint(wp)}]',
+                                    ),
+                                    trailing: IconButton(
+                                      icon: const Icon(
+                                        Icons.delete_outline,
+                                        color: Colors.redAccent,
+                                        size: 18,
+                                      ),
+                                      onPressed: teaching.isUploading
+                                          ? null
+                                          : () =>
+                                                teaching.removeWaypoint(index),
+                                    ),
+                                  ),
+                                );
+                              },
                             ),
-                          );
-                        },
-                      ),
                     ),
                   ],
                 ),
@@ -1136,40 +1387,65 @@ class _TeachingTabState extends State<TeachingTab> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Text('대상 시퀀스 선택', style: TextStyle(fontSize: 12, color: Colors.blueGrey, fontWeight: FontWeight.bold)),
+                    const Text(
+                      '대상 시퀀스 선택',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.blueGrey,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     const SizedBox(height: 6),
                     DropdownButton<int>(
                       isExpanded: true,
-                      value: selectedSequence,
-                      items: List.generate(12, (index) {
+                      value: teaching.selectedSequence,
+                      items: List.generate(TeachingController.sequenceCount, (
+                        index,
+                      ) {
                         return DropdownMenuItem<int>(
                           value: index + 1,
-                          child: Text(sequenceNames[index], style: const TextStyle(fontWeight: FontWeight.bold)),
+                          child: Text(
+                            '시퀀스 ${index + 1}',
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
                         );
                       }),
-                       onChanged: _uploading ? null : (val) {
-                        if (val != null) setState(() => selectedSequence = val);
-                      },
+                      onChanged: teaching.isUploading
+                          ? null
+                          : (val) {
+                              if (val != null) {
+                                teaching.selectSequence(val);
+                              }
+                            },
                     ),
                     const SizedBox(height: 12),
                     ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-                      onPressed: (bltController.isArmEnabled && !_uploading)
-                          ? () => unawaited(bltController.sendCommand(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed:
+                          (bltController.isArmEnabled && !teaching.isUploading)
+                          ? () => unawaited(
+                              bltController.sendCommand(
                                 2,
-                                data: [2, selectedSequence],
-                              ))
+                                data: [2, teaching.selectedSequence],
+                              ),
+                            )
                           : null,
                       icon: const Icon(Icons.play_arrow),
                       label: const Text('시퀀스 재생 (PLAY)'),
                     ),
                     const SizedBox(height: 8),
                     ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurple, foregroundColor: Colors.white),
-                      onPressed: _uploading
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.deepPurple,
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed: teaching.isUploading
                           ? null
                           : () => unawaited(_uploadToSTM32(bltController)),
-                      icon: _uploading
+                      icon: teaching.isUploading
                           ? const SizedBox(
                               width: 18,
                               height: 18,
@@ -1177,22 +1453,25 @@ class _TeachingTabState extends State<TeachingTab> {
                             )
                           : const Icon(Icons.upload_file),
                       label: Text(
-                        _uploading
-                            ? '업로드 중...'
-                            : '기기(STM32) 플래시 업로드',
+                        teaching.isUploading ? '업로드 중...' : '기기(STM32) 플래시 업로드',
                       ),
                     ),
                     const SizedBox(height: 8),
                     OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.redAccent), foregroundColor: Colors.redAccent),
-                      onPressed: _uploading
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Colors.redAccent),
+                        foregroundColor: Colors.redAccent,
+                      ),
+                      onPressed: teaching.isUploading
                           ? null
                           : () {
-                              setState(() => currentWaypoints.clear());
-                              unawaited(bltController.sendCommand(
-                                2,
-                                data: [3, selectedSequence],
-                              ));
+                              teaching.clearCurrentSequence();
+                              unawaited(
+                                bltController.sendCommand(
+                                  2,
+                                  data: [3, teaching.selectedSequence],
+                                ),
+                              );
                             },
                       icon: const Icon(Icons.delete),
                       label: const Text('시퀀스 초기화 (RESET)'),

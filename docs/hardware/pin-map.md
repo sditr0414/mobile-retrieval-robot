@@ -16,6 +16,16 @@
 | TX | PA9 | HC-05 RXD |
 | RX | PA10 | HC-05 TXD |
 
+## USART2 디버그·Teleplot
+
+| 기능 | STM32 핀 | 연결 대상 |
+|---|---|---|
+| TX | PA2 | NUCLEO ST-LINK Virtual COM Port |
+| RX | PA3 | NUCLEO ST-LINK Virtual COM Port |
+
+- 설정: `115200 baud`, 8 data bits, no parity, 1 stop bit
+- Teleplot은 PC에 표시된 ST-LINK Virtual COM Port를 선택합니다.
+
 ## L298N
 
 | 기능 | STM32 핀 | 비고 |
@@ -70,9 +80,16 @@ HC-SR04 ECHO ── 1 kΩ ──┬── STM32 PA0
 | 4 | Wrist Rotation |
 | 5 | Gripper |
 
-## 로봇팔 전개 인터록
+## 로봇팔·차량 동작 인터록
 
-로봇팔 전개는 다음 조건을 모두 만족할 때만 허용합니다.
+현재 펌웨어는 로봇팔 수동 이동과 티칭 재생을 시작하기 전에 차량 PWM을 0으로
+만듭니다. 관절 이동 또는 웨이포인트 유지가 진행되는 동안에는 새 주행 명령을
+적용하지 않으며, 로봇팔 동작이 끝난 후 들어온 주행 명령부터 허용합니다.
+
+### 후속 초음파 전개 인터록
+
+아래 초음파 기반 조건은 후속 구현 범위이며 현재 펌웨어에는 아직 연결되지
+않았습니다.
 
 ```text
 vehicle_speed_command == 0

@@ -9,9 +9,12 @@
 
 static TIM_HandleTypeDef *drive_timer;
 static uint32_t last_command_tick;
-static uint8_t command_received;
+static volatile uint8_t command_received;
 static volatile uint8_t estop_latched;
 static volatile uint8_t storage_inhibit;
+static volatile uint8_t arm_motion_inhibit;
+static volatile uint8_t fresh_drive_command_required;
+static volatile uint32_t arm_motion_release_tick;
 
 static void SetMotorDirection(GPIO_TypeDef *in1_port,
                               uint16_t in1_pin,
@@ -66,6 +69,9 @@ HAL_StatusTypeDef Drive4WD_Init(TIM_HandleTypeDef *timer)
   Drive4WD_Stop();
   estop_latched = 0U;
   storage_inhibit = 0U;
+  arm_motion_inhibit = 0U;
+  fresh_drive_command_required = 0U;
+  arm_motion_release_tick = 0U;
   return HAL_OK;
 }
 
@@ -95,10 +101,26 @@ void Drive4WD_Apply(const BluetoothDriveCommand *command)
     return;
   }
 
-  if ((estop_latched != 0U) || (storage_inhibit != 0U))
+  if ((estop_latched != 0U) ||
+      (storage_inhibit != 0U) ||
+      (arm_motion_inhibit != 0U))
   {
     Drive4WD_Stop();
     return;
+  }
+
+  /*
+   * 로봇팔 이동 중 큐에 들어온 오래된 주행 패킷은 해제 후에도 적용하지 않는다.
+   * 해제 시각보다 나중에 수신한 새 패킷부터 차량을 움직인다.
+   */
+  if (fresh_drive_command_required != 0U)
+  {
+    if ((int32_t)(command->received_tick - arm_motion_release_tick) <= 0)
+    {
+      Drive4WD_Stop();
+      return;
+    }
+    fresh_drive_command_required = 0U;
   }
 
   left_pwm = ScalePwm(command->left_pwm);
@@ -165,5 +187,23 @@ void Drive4WD_SetStorageInhibit(uint8_t inhibit)
   {
     Drive4WD_Stop();
     command_received = 0U;
+  }
+}
+
+void Drive4WD_SetArmMotionInhibit(uint8_t inhibit)
+{
+  if (inhibit != 0U)
+  {
+    arm_motion_inhibit = 1U;
+    fresh_drive_command_required = 1U;
+    Drive4WD_Stop();
+    command_received = 0U;
+    return;
+  }
+
+  if (arm_motion_inhibit != 0U)
+  {
+    arm_motion_release_tick = HAL_GetTick();
+    arm_motion_inhibit = 0U;
   }
 }

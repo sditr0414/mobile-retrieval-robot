@@ -47,7 +47,8 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
-#define ARM_MONITOR_INTERVAL_MS (200U)
+#define TELEPLOT_INTERVAL_MS   (100U)
+#define TELEPLOT_TX_TIMEOUT_MS (100U)
 
 /* USER CODE END PD */
 
@@ -58,6 +59,13 @@
 
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN Variables */
+
+static osThreadId_t telemetryTaskHandle;
+static const osThreadAttr_t telemetryTask_attributes = {
+    .name = "telemetryTask",
+    .stack_size = 768 * 4,
+    .priority = (osPriority_t)osPriorityLow,
+};
 
 /* USER CODE END Variables */
 /* Definitions for bluetoothTask */
@@ -97,7 +105,8 @@ const osMutexAttr_t flashMutex_attributes = {.name = "flashMutex"};
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
 
-static void PrintArmStatus(void);
+static void StartTelemetryTask(void *argument);
+static void SendArmTelemetry(void);
 
 /* USER CODE END FunctionPrototypes */
 
@@ -191,6 +200,9 @@ void MX_FREERTOS_Init(void) {
   driveTaskHandle = osThreadNew(StartDriveTask, NULL, &driveTask_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
+  telemetryTaskHandle =
+      osThreadNew(StartTelemetryTask, NULL, &telemetryTask_attributes);
+
   /* RTOS 객체 생성 실패 상태로 장치를 구동하지 않는다. */
   if ((i2cMutexHandle == NULL) ||
       (flashMutexHandle == NULL) ||
@@ -198,7 +210,8 @@ void MX_FREERTOS_Init(void) {
       (driveQueueHandle == NULL) ||
       (bluetoothTaskHandle == NULL) ||
       (armTaskHandle == NULL) ||
-      (driveTaskHandle == NULL)) {
+      (driveTaskHandle == NULL) ||
+      (telemetryTaskHandle == NULL)) {
     Error_Handler();
   }
   /* USER CODE END RTOS_THREADS */
@@ -257,15 +270,25 @@ void StartArmTask(void *argument) {
     if (osMessageQueueGet(armQueueHandle,
                           &command,
                           NULL,
-                          10U) == osOK) {
+                          5U) == osOK) {
       if (command.mode == BLUETOOTH_MODE_ARM) {
-        if (command.data[6] == BLUETOOTH_ARM_ENABLE_HOME) {
-          arm_result = RobotArm_EnableHome(command.data);
-        } else if (command.data[6] == BLUETOOTH_ARM_DISABLE) {
+        if (command.data[6] == BLUETOOTH_ARM_DISABLE) {
           RobotArm_Disable();
+          Drive4WD_SetArmMotionInhibit(0U);
           arm_result = ROBOT_ARM_OK;
         } else {
-          arm_result = RobotArm_SetPose(command.data);
+          /* 관절을 움직이기 전에 차량을 멈추고 주행 명령을 차단한다. */
+          Drive4WD_SetArmMotionInhibit(1U);
+
+          if (command.data[6] == BLUETOOTH_ARM_ENABLE_HOME) {
+            arm_result = RobotArm_EnableHome(command.data);
+          } else {
+            arm_result = RobotArm_SetPose(command.data);
+          }
+
+          if (arm_result != ROBOT_ARM_OK) {
+            Drive4WD_SetArmMotionInhibit(0U);
+          }
         }
 
         /* 활성화/비활성화와 실패한 이동은 앱에서 상태를 알 수 있게 응답한다. */
@@ -280,10 +303,14 @@ void StartArmTask(void *argument) {
         status = HAL_ERROR;
 
         if (command.data[0] == 2U) {
+          Drive4WD_SetArmMotionInhibit(1U);
           sequence = TeachingStorage_Get(command.data[1]);
           status = (RobotArm_Play(sequence) == ROBOT_ARM_OK)
                        ? HAL_OK
                        : HAL_ERROR;
+          if (status != HAL_OK) {
+            Drive4WD_SetArmMotionInhibit(0U);
+          }
         } else if (command.data[0] == 3U) {
           RobotArm_Stop();
           Drive4WD_SetStorageInhibit(1U);
@@ -326,7 +353,9 @@ void StartArmTask(void *argument) {
     }
 
     RobotArm_Update();
-    PrintArmStatus();
+    if (RobotArm_IsMotionActive() == 0U) {
+      Drive4WD_SetArmMotionInhibit(0U);
+    }
   }
   /* USER CODE END StartArmTask */
 }
@@ -362,46 +391,100 @@ void StartDriveTask(void *argument) {
 /* Private application code --------------------------------------------------*/
 /* USER CODE BEGIN Application */
 
-static void PrintArmStatus(void) {
-  static int16_t previous_values[ROBOT_ARM_JOINT_COUNT];
-  static uint8_t previous_enabled = 2U;
-  static uint32_t previous_tick;
-  int16_t values[ROBOT_ARM_JOINT_COUNT];
-  uint16_t pulses[ROBOT_ARM_JOINT_COUNT];
-  uint8_t enabled;
-  uint32_t now;
+static void StartTelemetryTask(void *argument) {
+  uint32_t next_tick;
+
+  (void)argument;
+  next_tick = osKernelGetTickCount();
+
+  for (;;) {
+    SendArmTelemetry();
+    next_tick += TELEPLOT_INTERVAL_MS;
+    (void)osDelayUntil(next_tick);
+  }
+}
+
+static void SendArmTelemetry(void) {
+  static int16_t previous_targets[ROBOT_ARM_JOINT_COUNT];
+  static RobotArmTelemetryState previous_state;
+  static uint8_t first_sample = 1U;
+  RobotArmTelemetry telemetry;
+  const char *state_text;
   int length;
-  char message[192];
+  char message[1024];
 
-  enabled = RobotArm_GetStatus(values, pulses);
-  now = HAL_GetTick();
-
-  if ((enabled == previous_enabled) &&
-      (memcmp(values, previous_values, sizeof(values)) == 0)) {
+  if (RobotArm_GetTelemetry(&telemetry) == 0U) {
     return;
   }
 
-  /* 빠른 관절 이동 중에는 UART 출력 횟수를 제한한다. */
-  if ((previous_enabled != 2U) &&
-      ((now - previous_tick) < ARM_MONITOR_INTERVAL_MS)) {
-    return;
+  switch (telemetry.state) {
+    case ROBOT_ARM_TELEMETRY_IDLE:
+      state_text = "IDLE";
+      break;
+    case ROBOT_ARM_TELEMETRY_MOVING:
+      state_text = "MOVING";
+      break;
+    case ROBOT_ARM_TELEMETRY_HOLDING:
+      state_text = "HOLDING";
+      break;
+    default:
+      state_text = "DISABLED";
+      break;
   }
 
-  if (enabled == 0U) {
-    length = snprintf(message, sizeof(message), "ARM OFF\r\n");
-  } else {
-    length = snprintf(
-        message,
-        sizeof(message),
-        "ARM OUT B=%+d/%uus S=%+d/%uus E=%+d/%uus "
-        "WT=%+d/%uus WR=%+d/%uus G=%d%%/%uus\r\n",
-        values[0], pulses[0],
-        values[1], pulses[1],
-        values[2], pulses[2],
-        values[3], pulses[3],
-        values[4], pulses[4],
-        values[5], pulses[5]);
-  }
+  /*
+   * 'current'와 'target'을 같은 Teleplot 그래프에 추가하면
+   * 보간 속도와 목표 도달 여부를 바로 비교할 수 있다.
+   */
+  length = snprintf(
+      message,
+      sizeof(message),
+      ">arm.base.current:%d\r\n"
+      ">arm.base.target:%d\r\n"
+      ">arm.base.pulse_us:%u\r\n"
+      ">arm.shoulder.current:%d\r\n"
+      ">arm.shoulder.target:%d\r\n"
+      ">arm.shoulder.pulse_us:%u\r\n"
+      ">arm.elbow.current:%d\r\n"
+      ">arm.elbow.target:%d\r\n"
+      ">arm.elbow.pulse_us:%u\r\n"
+      ">arm.wrist_tilt.current:%d\r\n"
+      ">arm.wrist_tilt.target:%d\r\n"
+      ">arm.wrist_tilt.pulse_us:%u\r\n"
+      ">arm.wrist_rotate.current:%d\r\n"
+      ">arm.wrist_rotate.target:%d\r\n"
+      ">arm.wrist_rotate.pulse_us:%u\r\n"
+      ">arm.gripper.current_percent:%d\r\n"
+      ">arm.gripper.target_percent:%d\r\n"
+      ">arm.gripper.pulse_us:%u\r\n"
+      ">arm.enabled:%u\r\n"
+      ">arm.state_code:%u\r\n"
+      ">arm.sequence_active:%u\r\n"
+      ">arm.waypoint:%u\r\n"
+      ">arm.state:%s|t\r\n",
+      telemetry.current_values[0],
+      telemetry.target_values[0],
+      (unsigned int)telemetry.pulse_widths_us[0],
+      telemetry.current_values[1],
+      telemetry.target_values[1],
+      (unsigned int)telemetry.pulse_widths_us[1],
+      telemetry.current_values[2],
+      telemetry.target_values[2],
+      (unsigned int)telemetry.pulse_widths_us[2],
+      telemetry.current_values[3],
+      telemetry.target_values[3],
+      (unsigned int)telemetry.pulse_widths_us[3],
+      telemetry.current_values[4],
+      telemetry.target_values[4],
+      (unsigned int)telemetry.pulse_widths_us[4],
+      telemetry.current_values[5],
+      telemetry.target_values[5],
+      (unsigned int)telemetry.pulse_widths_us[5],
+      (unsigned int)telemetry.enabled,
+      (unsigned int)telemetry.state,
+      (unsigned int)telemetry.sequence_active,
+      (unsigned int)telemetry.waypoint,
+      state_text);
 
   if (length > 0) {
     uint16_t transmit_length = (length < (int)sizeof(message))
@@ -410,12 +493,42 @@ static void PrintArmStatus(void) {
     (void)HAL_UART_Transmit(&huart2,
                             (uint8_t *)message,
                             transmit_length,
-                            20U);
+                            TELEPLOT_TX_TIMEOUT_MS);
   }
 
-  memcpy(previous_values, values, sizeof(previous_values));
-  previous_enabled = enabled;
-  previous_tick = now;
+  if ((first_sample != 0U) ||
+      (previous_state != telemetry.state) ||
+      (memcmp(previous_targets,
+              telemetry.target_values,
+              sizeof(previous_targets)) != 0)) {
+    length = snprintf(
+        message,
+        sizeof(message),
+        "ARM %s TARGET B=%+d S=%+d E=%+d WT=%+d WR=%+d G=%d%%\r\n",
+        state_text,
+        telemetry.target_values[0],
+        telemetry.target_values[1],
+        telemetry.target_values[2],
+        telemetry.target_values[3],
+        telemetry.target_values[4],
+        telemetry.target_values[5]);
+
+    if (length > 0) {
+      uint16_t transmit_length = (length < (int)sizeof(message))
+                                     ? (uint16_t)length
+                                     : (uint16_t)(sizeof(message) - 1U);
+      (void)HAL_UART_Transmit(&huart2,
+                              (uint8_t *)message,
+                              transmit_length,
+                              TELEPLOT_TX_TIMEOUT_MS);
+    }
+  }
+
+  memcpy(previous_targets,
+         telemetry.target_values,
+         sizeof(previous_targets));
+  previous_state = telemetry.state;
+  first_sample = 0U;
 }
 
 /* USER CODE END Application */

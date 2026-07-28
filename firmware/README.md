@@ -84,6 +84,10 @@ firmware/
 - 무효 패킷 이후 다음 `0xAA`를 검색해 동기화 복구
 - UART 오류 시 태스크 문맥에서 circular DMA 재시작
 
+로봇팔 이동 또는 티칭 재생을 시작하면 차량 PWM을 즉시 0으로 만들고
+`arm_motion_inhibit`를 설정합니다. 이동과 웨이포인트 유지가 끝날 때까지
+일반 주행 명령은 적용하지 않으며, 이후 들어오는 새 주행 패킷부터 허용합니다.
+
 세부 바이트 배열은 `docs/protocol/bluetooth-protocol.md`를 기준으로 합니다.
 
 ## CubeMX 설정 점검
@@ -118,20 +122,57 @@ Wrist Tilt만 `500/1500/2500 us`를 임시 기준으로 사용하며 실제 끝�
 
 앱과 USART2 모니터에서 Base부터 Wrist Rotate까지는 `-90~+90도`입니다.
 Gripper는 `0%` 최대 열림, `100%` 최대 닫힘으로 표시합니다. Bluetooth와
-Flash에는 각도 또는 퍼센트를 변환한 `0~180` 값이 저장됩니다. Base와
-Gripper는 조립 방향에 맞춰 펌웨어에서 출력 방향을 반전합니다. Base의
+Flash에는 각도 또는 퍼센트를 변환한 `0~180` 값이 저장됩니다. Base,
+Elbow, Wrist Tilt와 Gripper는 조립 방향에 맞춰 출력 방향을 반전합니다. Base의
 측정값은 `500/1500/2500 us`, Gripper의 측정값은
 `1140/1490/1840 us`입니다.
 
-수동 이동, 홈 복귀와 티칭 재생은 모두 `1도/20 ms`, 약 `50도/s` 이하로
-보간합니다. 홈 자세는 관절 `0도`, Gripper 최대 열림 `0%`이며 패킷값은
-`[90,90,90,90,90,0]`입니다.
+일반 관절의 수동 이동, 홈 복귀와 티칭 재생은 `1도/20 ms`, 약 `50도/s`
+이하로 보간합니다. Gripper는 원래 속도인 패킷 `1단계/15 ms`로 이동합니다.
+홈/주행 준비 자세는 Base `0도`, Shoulder `-50도`, Elbow `+90도`,
+Wrist Tilt `0도`, Wrist Rotate `+60도`, Gripper 최대 열림 `0%`이며
+패킷값은 `[90,40,180,90,150,0]`입니다.
 출력을 껐다 다시 켤 때는 마지막 명령 위치에서 홈까지 천천히 이동합니다.
 단, 일반 서보에는 위치 피드백이 없으므로 전원 투입 후 첫 활성화는 실제
 시작 위치를 알 수 없고 첫 홈 이동의 물리 속도를 보장할 수 없습니다.
 
 Gripper 패킷 의미가 변경되어 티칭 Flash 저장 버전은 2입니다. 버전 1 데이터는
 안전을 위해 불러오지 않으므로 앱에서 새 의미로 웨이포인트를 다시 저장해야 합니다.
+
+## Teleplot 로봇팔 모니터
+
+USART2는 `115200 baud`, 8-N-1로 설정되어 있으며 NUCLEO ST-LINK Virtual
+COM Port를 통해 Teleplot에 연결합니다. 펌웨어는 저우선순위
+`telemetryTask`에서 100 ms마다 `>이름:값` 형식으로 출력하므로 로봇팔 제어
+태스크의 서보 보간을 UART 전송으로 막지 않습니다.
+
+관절마다 다음 그래프 변수가 생성됩니다.
+
+```text
+arm.base.current
+arm.base.target
+arm.base.pulse_us
+```
+
+`base` 대신 `shoulder`, `elbow`, `wrist_tilt`, `wrist_rotate`, `gripper`가
+각 관절 이름으로 사용됩니다. Gripper의 현재값과 목표값 이름에는
+`current_percent`, `target_percent`를 사용합니다.
+
+상태 변수:
+
+| 변수 | 의미 |
+|---|---|
+| `arm.enabled` | 0 출력 차단, 1 출력 활성화 |
+| `arm.state_code` | 0 차단, 1 대기, 2 이동, 3 웨이포인트 유지 |
+| `arm.state` | `DISABLED`, `IDLE`, `MOVING`, `HOLDING` 텍스트 |
+| `arm.sequence_active` | 티칭 시퀀스 재생 여부 |
+| `arm.waypoint` | 재생 중인 웨이포인트 번호, 재생 중이 아니면 0 |
+
+Teleplot에서 각 관절의 `current`와 `target`을 같은 그래프에 추가하면 목표
+추종과 이동 속도를 확인할 수 있습니다. `pulse_us`는 PCA9685에 마지막으로
+명령한 펄스폭이며 출력 차단 중에는 0으로 표시합니다. 일반 서보에는 위치
+센서 피드백이 없으므로 `current`는 실제 측정 위치가 아니라 펌웨어가 마지막으로
+출력한 명령 위치입니다.
 
 ## 빌드
 
