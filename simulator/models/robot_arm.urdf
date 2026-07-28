@@ -1,0 +1,208 @@
+<?xml version="1.0"?>
+<robot name="mobile_retrieval_arm">
+
+  <!--
+    형상과 관절 방향을 확인하기 위한 초기 URDF입니다.
+    STL은 mm 단위이므로 0.001 배율로 불러옵니다.
+    기준 길이: Base 60 mm, Base-Shoulder 40 mm,
+    Shoulder-Elbow 120 mm, Elbow-Wrist 120 mm, Wrist-Gripper 125 mm.
+    출력 부품과 서보의 나열 항목 합계는 461.22 g입니다.
+    TODO: 링크별 무게중심과 관성텐서를 확인한 뒤 inertial을 추가합니다.
+  -->
+
+  <material name="base_gray">
+    <color rgba="0.72 0.74 0.78 1.0"/>
+  </material>
+  <material name="arm_blue">
+    <color rgba="0.08 0.25 0.82 1.0"/>
+  </material>
+  <material name="arm_white">
+    <color rgba="0.88 0.89 0.92 1.0"/>
+  </material>
+  <material name="gripper_dark">
+    <color rgba="0.16 0.17 0.20 1.0"/>
+  </material>
+
+  <link name="base_link">
+    <visual>
+      <!-- 캡처의 앞뒤 방향에 맞춰 수직축으로 180도 보정합니다. -->
+      <origin xyz="0 0 0" rpy="0 0 3.14159"/>
+      <geometry>
+        <mesh filename="base.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="base_gray"/>
+    </visual>
+    <visual>
+      <!-- Base cover의 중심 높이를 Base 기준 0 mm로 배치합니다. -->
+      <origin xyz="0.04068 -0.09288 -0.03904" rpy="1.5708 0 3.14159"/>
+      <geometry>
+        <mesh filename="base_cover.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="arm_blue"/>
+    </visual>
+  </link>
+
+  <link name="base_yaw_link">
+    <visual>
+      <!-- 중심 높이 60 mm에서 X축 기준 -90도로 회전합니다. -->
+      <origin xyz="-0.04078 -0.09288 0.14050" rpy="-1.5708 0 0"/>
+      <geometry>
+        <mesh filename="central_shaft.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="arm_blue"/>
+    </visual>
+  </link>
+
+  <joint name="base_yaw_joint" type="revolute">
+    <parent link="base_link"/>
+    <child link="base_yaw_link"/>
+    <origin xyz="0 0 0.060" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <!-- TODO: 실제 기구 제한, 토크와 속도로 교체합니다. -->
+    <limit lower="-1.5708" upper="1.5708" effort="1.0" velocity="1.0"/>
+  </joint>
+
+  <link name="shoulder_link">
+    <visual>
+      <!-- STL의 긴 Y축을 로봇의 위쪽 Z축으로 회전합니다. -->
+      <origin xyz="-0.02843 0.08043 -0.16353" rpy="1.5708 0 0"/>
+      <geometry>
+        <mesh filename="forearm.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="arm_blue"/>
+    </visual>
+  </link>
+
+  <joint name="shoulder_joint" type="revolute">
+    <parent link="base_yaw_link"/>
+    <child link="shoulder_link"/>
+    <origin xyz="0 0 0.040" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <!-- TODO: 실제 기구 제한, 토크와 속도로 교체합니다. -->
+    <limit lower="-1.5708" upper="1.5708" effort="1.0" velocity="1.0"/>
+  </joint>
+
+  <link name="elbow_link">
+    <visual>
+      <!-- 링크 축 기준 90도와 앞뒤 180도 방향을 함께 보정합니다. -->
+      <origin xyz="0.05558 0.10534 0.29243" rpy="-1.5708 0 3.14159"/>
+      <geometry>
+        <mesh filename="upper_arm.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="arm_white"/>
+    </visual>
+  </link>
+
+  <joint name="elbow_joint" type="revolute">
+    <parent link="shoulder_link"/>
+    <child link="elbow_link"/>
+    <origin xyz="0 0 0.1200" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <!-- TODO: 실제 기구 제한, 토크와 속도로 교체합니다. -->
+    <limit lower="-1.5708" upper="1.5708" effort="1.0" velocity="1.0"/>
+  </joint>
+
+  <link name="wrist_tilt_link">
+    <visual>
+      <!-- 현재 방향에서 Y축 기준 180도로 회전합니다. -->
+      <origin xyz="-0.07843 -0.10537 -0.30556" rpy="1.5708 0 3.14159"/>
+      <geometry>
+        <mesh filename="wrist.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="arm_white"/>
+    </visual>
+  </link>
+
+  <joint name="wrist_tilt_joint" type="revolute">
+    <parent link="elbow_link"/>
+    <child link="wrist_tilt_link"/>
+    <origin xyz="0.120 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <!-- TODO: 실제 기구 제한, 토크와 속도로 교체합니다. -->
+    <limit lower="-1.5708" upper="1.5708" effort="1.0" velocity="1.0"/>
+  </joint>
+
+  <link name="wrist_rotate_link">
+    <visual>
+      <!-- 그리퍼 끝이 손목에서 약 125 mm가 되도록 원본 조립 좌표를 맞춥니다. -->
+      <origin xyz="-0.04800 0.19300 -0.01750" rpy="0 0 3.14159"/>
+      <geometry>
+        <mesh filename="gripper_base.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="arm_white"/>
+    </visual>
+  </link>
+
+  <joint name="wrist_rotate_joint" type="revolute">
+    <parent link="wrist_tilt_link"/>
+    <child link="wrist_rotate_link"/>
+    <!-- 그리퍼 전체를 링크 축 기준 왼쪽 90도로 보정합니다. -->
+    <origin xyz="0 0 0" rpy="-1.5708 0 0"/>
+    <axis xyz="1 0 0"/>
+    <!-- TODO: 실제 기구 제한, 토크와 속도로 교체합니다. -->
+    <limit lower="-1.5708" upper="1.5708" effort="1.0" velocity="1.0"/>
+  </joint>
+
+  <link name="gripper_finger_1_link">
+    <visual>
+      <origin xyz="-0.09417 0.19450 -0.00547" rpy="0 0 3.14159"/>
+      <geometry>
+        <mesh filename="gear_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="arm_white"/>
+    </visual>
+    <visual>
+      <origin xyz="-0.09417 0.19450 -0.00547" rpy="0 0 3.14159"/>
+      <geometry>
+        <mesh filename="bar_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="arm_white"/>
+    </visual>
+    <visual>
+      <origin xyz="-0.09417 0.19450 -0.00547" rpy="0 0 3.14159"/>
+      <geometry>
+        <mesh filename="gripper_finger_1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="gripper_dark"/>
+    </visual>
+  </link>
+
+  <joint name="gripper_finger_1_joint" type="fixed">
+    <parent link="wrist_rotate_link"/>
+    <child link="gripper_finger_1_link"/>
+    <origin xyz="0.04617 -0.00150 -0.01204" rpy="0 0 0"/>
+    <!-- TODO: 기어와 4절 링크의 실제 회전 중심을 확인한 뒤 가동 관절로 변경합니다. -->
+  </joint>
+
+  <link name="gripper_finger_2_link">
+    <visual>
+      <origin xyz="-0.09395 0.19419 -0.02934" rpy="0 0 3.14159"/>
+      <geometry>
+        <mesh filename="gear_2.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="arm_white"/>
+    </visual>
+    <visual>
+      <origin xyz="-0.09395 0.19419 -0.02934" rpy="0 0 3.14159"/>
+      <geometry>
+        <mesh filename="bar_2.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="arm_white"/>
+    </visual>
+    <visual>
+      <origin xyz="-0.09395 0.19419 -0.02934" rpy="0 0 3.14159"/>
+      <geometry>
+        <mesh filename="gripper_finger_2.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="gripper_dark"/>
+    </visual>
+  </link>
+
+  <joint name="gripper_finger_2_joint" type="fixed">
+    <parent link="wrist_rotate_link"/>
+    <child link="gripper_finger_2_link"/>
+    <origin xyz="0.04595 -0.00119 0.01184" rpy="0 0 0"/>
+    <!-- TODO: 기어와 4절 링크의 실제 회전 중심을 확인한 뒤 가동 관절로 변경합니다. -->
+  </joint>
+
+</robot>

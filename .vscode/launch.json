@@ -1,0 +1,23 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "STM32F411RE: Build and Debug (ST-LINK)",
+      "type": "stlinkgdbtarget",
+      "request": "launch",
+      "origin": "snippet",
+      "cwd": "${workspaceFolder}/firmware/mobile_retrieval_robot",
+      "preBuild": "${command:st-stm32-ide-debug-launch.build}",
+      "runEntry": "main",
+      "deviceName": "STM32F411RETx",
+      "serverInterface": "SWD",
+      "serverInterfaceFrequency": "140",
+      "serverReset": "Connect under reset",
+      "imagesAndSymbols": [
+        {
+          "imageFileName": "${workspaceFolder}/firmware/mobile_retrieval_robot/build/Debug/mobile_retrieval_robot.elf"
+        }
+      ]
+    }
+  ]
+}

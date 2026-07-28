@@ -1,0 +1,2 @@
+pybullet-arm64==3.2.8; sys_platform == "win32"
+pybullet==3.2.7; sys_platform != "win32"

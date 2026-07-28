@@ -8,6 +8,8 @@
 
 ```text
 mobile-retrieval-robot/
+├─ app/        스마트폰 제어 앱
+├─ simulator/  PyBullet 로봇 시뮬레이터
 ├─ firmware/   STM32F411 제어 코드
 ├─ docs/       부품·배선·통신·협업 지침
 └─ README.md   프로젝트 전체 안내
@@ -18,9 +20,12 @@ mobile-retrieval-robot/
 현재 1차 펌웨어에서는 아래 기능만 구현합니다.
 
 - HC-05 Bluetooth 명령 수신
+- 앱 기준 고정 11바이트 패킷과 128바이트 circular DMA 파싱
 - PCA9685 기반 로봇팔 서보 6채널 제어
 - L298N 기반 4WD 좌우 모터 제어
-- Bluetooth 연결 종료 또는 명령 타임아웃 시 차량 정지
+- 12개 티칭 시퀀스의 내부 Flash 저장과 재생
+- Bluetooth 주행 명령 타임아웃 시 차량 정지
+- 잠금식 E-STOP과 명시적인 로봇팔 출력 활성화
 
 초음파 센서와 IMU는 후속 단계에서 추가합니다. 휠 엔코더는 사용하지 않습니다.
 
@@ -30,15 +35,16 @@ mobile-retrieval-robot/
 
 - 6채널 서보 수동 제어
 - 저장 동작 실행
-- 실행 중 티칭
+- 앱에서 현재 자세를 웨이포인트로 추가
 - 전원이 꺼져도 유지되는 티칭 데이터 저장
-- 조이스틱 기반 XYZ 말단 위치 제어 및 역기구학
+- 후속 단계에서 조이스틱 기반 XYZ 말단 위치 제어와 역기구학 추가
 - 후속 단계에서 전방 초음파 센서 기반 전개 안전 인터록 추가
 
 ### 4WD 차량
 
 - 조이스틱 기반 전진·후진·회전·속도 제어
-- Bluetooth 연결 종료 또는 명령 타임아웃 시 자동 정지
+- 주행 명령 100 ms heartbeat와 500 ms 펌웨어 타임아웃
+- 사용자 확인 전까지 유지되는 E-STOP 잠금
 - 후속 단계에서 IMU yaw 기반 방향 안정화 추가
 - 휠 엔코더와 엔코더 기반 거리·위치 제어는 사용하지 않음
 
@@ -86,6 +92,8 @@ STM32F411
 ## 문서 바로가기
 
 - [프로젝트 부품 목록(BOM)](docs/hardware/bom.md)
+- [스마트폰 앱 안내](app/README.md)
+- [PyBullet 시뮬레이터 안내](simulator/README.md)
 - [STM32 펌웨어 안내](firmware/README.md)
 - [협업 가이드](docs/collaboration/CONTRIBUTING.md)
 - [협업 도구 안내](docs/collaboration/collaboration-tools.md)
@@ -103,12 +111,13 @@ git pull
 git switch -c feature/작업이름
 ```
 
-기능 작업은 `firmware/`, 설계와 협업 지침은 `docs/`에서 관리합니다.
+스마트폰 앱은 `app/`, 시뮬레이터는 `simulator/`, STM32 코드는 `firmware/`,
+설계와 협업 지침은 `docs/`에서 관리합니다.
 
 ## 안전 원칙
 
 - 서보와 모터 전원을 STM32 보드에서 직접 공급하지 않습니다.
 - 모든 GND는 공통으로 연결하되 고전류 경로는 스타 접지로 분리합니다.
-- 차량 제어에는 300~500 ms 통신 타임아웃과 비상정지를 구현합니다.
+- 차량 제어에는 500 ms 통신 타임아웃과 잠금식 비상정지를 구현합니다.
 - 로봇팔을 펼친 상태에서는 차량 최고 속도를 제한합니다.
 - 배선 변경 후 전원을 넣기 전에 다른 팀원이 검토합니다.

@@ -11,7 +11,13 @@
 - 빌드 시스템: STM32CubeMX 네이티브 CMake + GCC
 - 운영체제: FreeRTOS CMSIS-RTOS2
 
-현재 `firmware/mobile_retrieval_robot`에는 STM32CubeMX가 생성한 초기 펌웨어와 아래 5개 애플리케이션 라이브러리의 빈 헤더·소스 파일만 있습니다.
+최상위 `app`에는 Flutter Android 제어 앱, `simulator`에는 PyBullet
+시뮬레이터가 있습니다. 로봇의 실측 모델 값은 확인 전까지 임의로 정하지 않고
+TODO로 남깁니다. 출력 부품과 서보 질량은 `simulator/models/mass_properties.json`
+기준으로 확정했으며, 링크별 무게중심과 관성텐서는 아직 TODO입니다.
+
+현재 `firmware/mobile_retrieval_robot`에는 STM32CubeMX 생성 코드와 아래 5개
+애플리케이션 라이브러리가 구현되어 있습니다.
 
 - `bluetooth`
 - `servo_driver`
@@ -19,7 +25,11 @@
 - `drive_4wd`
 - `teaching_storage`
 
-빈 소스 파일과 `App/Inc` 경로는 최상위 `CMakeLists.txt`에 등록되어 있습니다. 애플리케이션 함수 선언과 구현은 아직 없습니다.
+소스 파일과 `App/Inc` 경로는 최상위 `CMakeLists.txt`에 등록되어 있습니다.
+Bluetooth circular DMA 파서, 6채널 로봇팔, 4WD와 12개 티칭 시퀀스의
+Flash 저장이 FreeRTOS 태스크에 연결되어 있습니다. 실제 관절 보정값은
+`docs/hardware/servo-calibration.md`에 기록하며 측정되지 않은 값은 TODO로
+유지합니다.
 
 ## 2. 1차 펌웨어 범위
 
@@ -97,36 +107,67 @@
 - No parity
 - 1 stop bit
 - RX DMA circular 또는 Receive-to-Idle DMA 사용
+- DMA 수신 버퍼: 64 또는 128바이트
+- 앱 기준 고정 11바이트 바이너리 패킷 스트림 파싱
 - ISR에서는 수신 데이터 보관만 수행하고 명령 파싱과 장치 제어를 하지 않음
 
 ## 6. Bluetooth 프로토콜
 
-현재 `docs/protocol/bluetooth-protocol.md`는 줄바꿈으로 끝나는 ASCII 명령 형식을 정의합니다.
+Bluetooth 규격은 **Flutter 앱을 기준으로 한 고정 11바이트 바이너리
+패킷**입니다. ASCII 문자열 명령은 구현하지 않습니다.
 
 ```text
-CATEGORY,COMMAND,VALUE...\n
+[Header, Mode, Data0, Data1, Data2, Data3, Data4, Data5, Data6,
+ Checksum, Tail]
 ```
 
-주요 명령:
+- `Header`: `0xAA`
+- `Tail`: `0x55`
+- `Checksum`: Byte 1부터 Byte 8까지의 합을 256으로 나눈 나머지
+- 유효 Mode: `0x00` Drive, `0x01` Robot Arm, `0x02` Teaching
+- 스트림 동기화가 깨지면 다음 `0xAA`를 검색해 복구
+- Header, Tail, Mode, Checksum과 각 Mode의 값 범위를 모두 검증
+- 잘못된 패킷은 장치를 제어하지 않고 폐기
+
+### Mode 0: Drive
 
 ```text
-ARM,J,<joint>,<angle>
-ARM,HOME
-TEACH,START
-TEACH,ADD,<duration_ms>
-TEACH,STOP
-TEACH,SAVE,<slot>
-SEQ,PLAY,<slot>
-SEQ,PAUSE
-SEQ,STOP
-SEQ,CLEAR,<slot>
-DRIVE,<left_speed>,<right_speed>
-ESTOP
-STATUS?
-PING
+[0xAA, 0x00, L_DIR, L_PWM, R_DIR, R_PWM, Control, 0x00, 0x00,
+ checksum, 0x55]
 ```
 
-이전 펌웨어 설계에는 10바이트 바이너리 패킷 초안도 존재했습니다. ASCII 규격과 바이너리 규격을 혼합 구현하지 않으며, 실제 파서 구현 전에 사용할 규격을 문서에서 하나로 확정해야 합니다. 현재 저장소에서는 `docs/protocol/bluetooth-protocol.md`를 우선 기준으로 봅니다.
+- 방향: 앱 기준 `0` 전진, `1` 후진
+- PWM: `0~255`, TIM3의 `0~999` 범위로 변환
+- PWM이 `0`이면 해당 모터 정지
+- `Control=0` 일반, `1` E-STOP 잠금, `2` E-STOP 해제
+- E-STOP과 해제 패킷의 방향·PWM은 모두 `0`
+- Data5와 Data6은 반드시 `0x00`
+
+### Mode 1: Robot Arm
+
+```text
+[0xAA, 0x01, Base, Shoulder, Elbow, WristTilt, WristRotate, Gripper,
+ Control, checksum, 0x55]
+```
+
+- Data0~Data5는 6개 관절의 명령 각도
+- `Control=0` 이동, `1` 지정 홈 자세로 출력 활성화, `2` 출력 차단
+- 부팅 직후 출력은 꺼져 있으며 보정 설정 6개가 모두 등록되어야 활성화
+- 실제 측정 위치가 아니라 마지막으로 요청된 각도
+- 관절별 보정 범위를 벗어나면 패킷을 적용하지 않음
+
+### Mode 2: Teaching
+
+앱은 12개 시퀀스와 시퀀스당 최대 30개 웨이포인트를 사용합니다.
+
+- `Command=2`: 선택한 시퀀스 재생
+- `Command=3`: 선택한 시퀀스를 RAM과 Flash에서 초기화
+- `Command=4`: START, 전반부 3각도, 후반부 3각도, COMMIT 순서로 업로드
+- 모든 웨이포인트 조각을 받은 경우에만 Sector 7에 저장
+- 저장 결과는 같은 11바이트 형식의 ACK로 앱에 응답
+- 저장된 시퀀스를 부팅 직후 자동 실행하지 않음
+
+세부 바이트 배열과 검증 규칙의 기준 문서는 `docs/protocol/bluetooth-protocol.md`입니다.
 
 ## 7. FreeRTOS 구조
 
@@ -173,17 +214,32 @@ ArmTask
 - PCA9685 기본 I2C 주소: `0x40`
 - PCA9685 PWM 주파수: 50 Hz
 - 채널 0~5를 Base, Shoulder, Elbow, Wrist Tilt, Wrist Rotate, Gripper 순서로 사용
-- STM32 TIM 채널로 서보 PWM을 직접 만들지 않음
+- 최종 6채널 제어에서는 STM32 TIM으로 서보 PWM을 직접 만들지 않음
 - 실제 서보 위치는 읽을 수 없으므로 마지막 명령 각도를 상태로 관리
 - 관절별 최소각, 최대각, 홈, 방향, 최소·최대 펄스를 적용
-- 측정되지 않은 보정값은 임의로 결정하지 않고 `TODO`로 남김
+- Base부터 Wrist Rotate까지 앱과 시리얼 표시 각도는 `-90~+90도`를 사용
+- Gripper는 앱과 시리얼에서 `0%` 최대 열림, `100%` 최대 닫힘으로 표시
+- Bluetooth 패킷과 Flash에는 각도 또는 Gripper 퍼센트를 변환한 `0~180`을 저장
+- Base는 조립 방향에 맞춰 펌웨어 출력 방향을 반전
+- Gripper도 조립 방향에 맞춰 펌웨어 출력 방향을 반전
+- 홈 자세는 관절 `0도`, Gripper `0%`이며 패킷값은 `[90,90,90,90,90,0]`
+- 수동 이동, 홈 복귀와 티칭 재생은 `1도/20 ms`, 약 `50도/s`로 속도를 제한
+- Shoulder는 측정값을 환산한 633/1466/2322 us 사용
+- Elbow는 측정값을 환산한 633/1500/2388 us 사용
+- Wrist Rotate는 측정값을 환산한 500/1500/2533 us 사용
+- Wrist Tilt만 수동 보정을 위해 500/1500/2500 us를 임시 기준으로 사용
+- 측정된 Gripper 보정값은 최대 닫힘 1140 us, 열림 1840 us
 - 저장된 자세로 부팅 직후 자동 이동하지 않음
+- 일반 서보에는 위치 피드백이 없으므로 전원 투입 후 첫 활성화의 실제 시작
+  위치와 이동 속도는 보장할 수 없음
 
 ## 10. 차량 안전 원칙
 
 - GPIO와 PWM은 0으로 초기화
 - Bluetooth 차량 명령이 300~500 ms 동안 없으면 정지
-- 앱 ESTOP은 일반 명령보다 우선 처리
+- 앱 E-STOP은 잠금 상태로 유지하며 일반 명령보다 우선 처리
+- E-STOP 한 패킷으로 차량과 PCA9685 서보 출력을 함께 차단
+- Flash 삭제와 기록 중에는 차량 명령을 적용하지 않음
 - 물리 비상정지 장치는 모터와 서보 전원을 독립적으로 차단
 - `driveTask`에서 긴 지연을 사용하지 않음
 - 로봇팔 전개 시 차량 속도 제한값은 실제 시험 후 확정
@@ -193,11 +249,11 @@ ArmTask
 - STM32 내부 Flash Sector 7 사용
 - 시작 주소: `0x08060000`
 - 크기: 128 KiB
-- 애플리케이션 링커 FLASH 길이: 384 KiB로 제한 예정
-- 저장 형식에 `magic`, `version`, `frame count`, `frames`, `CRC` 포함
-- 자세는 RAM에 먼저 추가하고 명시적인 저장 명령에서만 Flash에 기록
+- 애플리케이션 링커 FLASH 길이: 384 KiB로 제한됨
+- 저장 형식에 `magic`, `version`, 12개 시퀀스, 웨이포인트 수와 `CRC` 포함
+- 업로드 자세는 임시 RAM에 먼저 모으고 COMMIT 명령에서만 Flash에 기록
 - 기록 후 Flash 내용을 다시 읽어 검증
-- 매 조이스틱 입력마다 Flash에 기록하지 않음
+- 매 관절 이동 명령마다 Flash에 기록하지 않음
 - 실제 위치가 아닌 명령된 각도를 저장
 
 ## 12. 코딩 원칙
@@ -231,8 +287,11 @@ ArmTask
 ## 14. 관련 문서
 
 - 프로젝트 소개: `README.md`
+- 스마트폰 앱 안내: `app/README.md`
+- PyBullet 시뮬레이터 안내: `simulator/README.md`
 - 펌웨어 안내: `firmware/README.md`
 - 부품 목록: `docs/hardware/bom.md`
 - 핀맵: `docs/hardware/pin-map.md`
+- 서보 보정값: `docs/hardware/servo-calibration.md`
 - Bluetooth 프로토콜: `docs/protocol/bluetooth-protocol.md`
 - 협업 지침: `docs/collaboration/CONTRIBUTING.md`

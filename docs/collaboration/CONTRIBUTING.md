@@ -58,6 +58,8 @@ docs/power-wiring
 
 | 영역 | 주 작업 위치 |
 |---|---|
+| 스마트폰 제어 앱 | `app/` |
+| PyBullet 시뮬레이터·로봇 모델 | `simulator/` |
 | STM32 및 로봇팔 제어 | `firmware/` |
 | 차량 주행·PID·IMU | `firmware/` |
 | 핀맵·배선·전원 | `docs/hardware/` |

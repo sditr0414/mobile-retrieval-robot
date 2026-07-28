@@ -11,8 +11,8 @@
 | 제어 | STM32F411 보드 | 1 | 전체 제어 | 현재 핀맵은 NUCLEO-F411RE 기준 |
 | 통신 | HC-05 B36 | 1 | 스마트폰 Bluetooth Classic SPP | UART, 초기 9600 baud |
 | 서보 제어 | PCA9685 | 1 | 서보 6채널 PWM 생성 | I2C, 50 Hz |
-| 로봇팔 | MG996R | 3 | Base, Shoulder, Arm/Elbow | 고토크 관절 |
-| 로봇팔 | SG90 | 3 | Wrist UD, Wrist Rotation, Gripper | 경량 관절 |
+| 로봇팔 | MG996R | 3 | Base, Shoulder, Arm/Elbow | 실측 55 g/개 |
+| 로봇팔 | SG90 | 3 | Wrist UD, Wrist Rotation, Gripper | 실측 9 g/개 |
 | 차량 | 4WD 섀시 | 1 | 이동 플랫폼 | 로봇팔 고정판 보강 필요 |
 | 차량 | DC 기어모터 | 4 | 바퀴 구동 | 좌우 2개씩 병렬 연결 예정 |
 | 차량 | 바퀴 | 4 | 이동 | 동일 지름 사용 |

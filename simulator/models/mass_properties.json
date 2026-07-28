@@ -1,0 +1,38 @@
+{
+  "unit": "g",
+  "printed_parts": {
+    "bar_1": 2.51,
+    "bar_2": 2.53,
+    "base": 72.29,
+    "base_cover": 9.85,
+    "central_shaft": 52.59,
+    "forearm": 44.10,
+    "gear_1": 3.21,
+    "gear_2": 2.96,
+    "gripper_base": 12.44,
+    "gripper_cover": 3.10,
+    "gripper_finger_1": 6.13,
+    "gripper_finger_2": 6.12,
+    "servo_retainer": 0.60,
+    "shaft_cover": 6.57,
+    "upper_arm": 31.17,
+    "wrist": 13.05
+  },
+  "servo_models": {
+    "MG996R": 55.0,
+    "SG90": 9.0
+  },
+  "joint_servos": {
+    "Base": "MG996R",
+    "Shoulder": "MG996R",
+    "Elbow": "MG996R",
+    "Wrist Tilt": "SG90",
+    "Wrist Rotate": "SG90",
+    "Gripper": "SG90"
+  },
+  "totals": {
+    "printed_parts": 269.22,
+    "servos": 192.0,
+    "listed_assembly": 461.22
+  }
+}
