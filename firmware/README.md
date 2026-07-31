@@ -34,7 +34,7 @@ mobile_retrieval_robot/
 | USART1 | PA9/PA10, 9600 8-N-1 |
 | RX DMA | DMA2 Stream2, Circular, 128바이트 버퍼 |
 | I2C1 | PB8/PB9, 100 kHz |
-| TIM3 | PSC=4, ARR=999, PA6/PA7, 20 kHz |
+| TIM2 | PSC=4, ARR=999, PA0/PA1, 20 kHz |
 | 모터 초기 출력 | GPIO/PWM 모두 0 |
 
 PCA9685가 서보 PWM 50 Hz를 생성합니다. PA2/PA3와 MPU6050 INT는 사용하지
@@ -101,13 +101,13 @@ cmake --preset Debug
 cmake --build --preset Debug
 ```
 
-## 실기 TODO
+## 남은 실기 튜닝
 
-- XL4015 출력과 STM32 VIN용 DC-DC
-- MPU6050 VCC·장착 방향
-- L298N 좌우 전진 극성
 - Wrist Tilt 포함 관절 안전 끝점
 - 실제 차체 PID 계수
+
+전원, MPU6050 장착 방향과 L298N 전진 극성은 실물에 적용되어 있습니다.
+구체적인 전원 모델·출력값은 저장소 문서에 기록하지 않았습니다.
 
 관련 문서: [핀맵](../docs/hardware/pin-map.md),
 [서보 보정](../docs/hardware/servo-calibration.md),

@@ -59,20 +59,20 @@ void Error_Handler(void);
 /* Private defines -----------------------------------------------------------*/
 #define LD2_Pin GPIO_PIN_5
 #define LD2_GPIO_Port GPIOA
-#define MOTOR_R_IN2_Pin GPIO_PIN_10
-#define MOTOR_R_IN2_GPIO_Port GPIOB
-#define MOTOR_R_IN1_Pin GPIO_PIN_8
-#define MOTOR_R_IN1_GPIO_Port GPIOA
+#define MOTOR_L_IN1_Pin GPIO_PIN_0
+#define MOTOR_L_IN1_GPIO_Port GPIOC
+#define MOTOR_L_IN2_Pin GPIO_PIN_1
+#define MOTOR_L_IN2_GPIO_Port GPIOC
+#define MOTOR_R_IN3_Pin GPIO_PIN_2
+#define MOTOR_R_IN3_GPIO_Port GPIOC
+#define MOTOR_R_IN4_Pin GPIO_PIN_3
+#define MOTOR_R_IN4_GPIO_Port GPIOC
 #define TMS_Pin GPIO_PIN_13
 #define TMS_GPIO_Port GPIOA
 #define TCK_Pin GPIO_PIN_14
 #define TCK_GPIO_Port GPIOA
 #define SWO_Pin GPIO_PIN_3
 #define SWO_GPIO_Port GPIOB
-#define MOTOR_L_IN1_Pin GPIO_PIN_6
-#define MOTOR_L_IN1_GPIO_Port GPIOB
-#define MOTOR_L_IN2_Pin GPIO_PIN_7
-#define MOTOR_L_IN2_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 

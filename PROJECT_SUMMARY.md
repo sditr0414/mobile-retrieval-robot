@@ -64,7 +64,7 @@ flowchart LR
     MCU <-->|I2C1| PCA[PCA9685]
     PCA --> S[서보 6개]
     MCU <-->|I2C1| IMU[MPU6050]
-    MCU -->|TIM3 PWM + GPIO| L298[L298N]
+    MCU -->|TIM2 PWM + GPIO| L298[L298N]
     L298 --> ML[왼쪽 DC 모터 2개]
     L298 --> MR[오른쪽 DC 모터 2개]
     MCU -->|내부 Flash| F[Sector 7 티칭·설정]
@@ -147,7 +147,7 @@ flowchart TD
 - 서보와 모터 고전류 귀환은 STM32 보드나 신호용 점퍼선을 지나지 않습니다.
 - PCA9685 `V+`–GND에 1000 µF 커패시터를 연결합니다.
 - L298N ENA/ENB 점퍼는 제거하고 STM32의 20 kHz PWM을 입력합니다.
-- STM32 VIN용 DC-DC는 추후 연결합니다.
+- STM32 VIN용 DC-DC는 실물에 적용되어 있습니다.
 
 ### 현재 전원 구성의 한계
 
@@ -190,14 +190,14 @@ XL4015 출력과 STM32 VIN용 DC-DC는 실물에 배선·적용되어 있습니�
 
 | 기능 | STM32 핀 | 역할 |
 |---|---|---|
-| ENA | PA6 / TIM3 CH1 | 왼쪽 모터 그룹 PWM |
-| IN1 | PB6 | 왼쪽 방향 |
-| IN2 | PB7 | 왼쪽 방향 |
-| ENB | PA7 / TIM3 CH2 | 오른쪽 모터 그룹 PWM |
-| IN3 | PA8 | 오른쪽 방향 |
-| IN4 | PB10 | 오른쪽 방향 |
+| ENA | PA0 / TIM2 CH1 | 왼쪽 모터 그룹 PWM |
+| IN1 | PC0 | 왼쪽 방향 |
+| IN2 | PC1 | 왼쪽 방향 |
+| ENB | PA1 / TIM2 CH2 | 오른쪽 모터 그룹 PWM |
+| IN3 | PC2 | 오른쪽 방향 |
+| IN4 | PC3 | 오른쪽 방향 |
 
-- TIM3: Prescaler 4, Auto-reload 999, 20 kHz.
+- TIM2: Prescaler 4, Auto-reload 999, 20 kHz.
 - 초기 PWM과 방향 GPIO는 모두 0.
 - 좌우 전진 GPIO 극성은 실제 L298N·모터 배선에 맞춰 적용되어 있습니다.
 
@@ -230,7 +230,7 @@ Bluetooth 상태 패킷으로 앱에 표시합니다.
 | SYSCLK / HCLK | 100 MHz / 100 MHz |
 | PCLK1 / PCLK2 | 50 MHz / 100 MHz |
 | I2C1 | 100 kHz |
-| TIM3 | 20 kHz 모터 PWM |
+| TIM2 | 20 kHz 모터 PWM |
 | PCA9685 | 50 Hz 서보 PWM |
 | USART1 | 9600 baud, 8-N-1 |
 
@@ -251,7 +251,7 @@ Bluetooth 상태 패킷으로 앱에 표시합니다.
 BluetoothTask ── bluetooth ── USART1 DMA
 ArmTask ─────── robot_arm ─── servo_driver ── I2C1/PCA9685
 ArmTask ─────── teaching_storage ───────────── 내부 Flash
-DriveTask ───── drive_4wd ─────────────────── TIM3/GPIO/L298N
+DriveTask ───── drive_4wd ─────────────────── TIM2/GPIO/L298N
 ImuTask ─────── imu ───────────────────────── I2C1/MPU6050
 StatusTask ──── bluetooth ─────────────────── PID·IMU 상태 송신
 ```
@@ -384,7 +384,7 @@ Gripper 중앙값은 열림과 닫힘의 평균으로 자동 계산합니다. �
 
 - 왼쪽 모터 2개를 한 그룹, 오른쪽 모터 2개를 한 그룹으로 제어.
 - 좌우 PWM 차이로 전진, 후진, 회전과 곡선 주행 구현.
-- 앱 PWM `0~255`를 TIM3 `0~999`로 변환.
+- 앱 PWM `0~255`를 TIM2 `0~999`로 변환.
 - 앱이 조이스틱 입력 중 약 100 ms마다 최신 명령 전송.
 - PWM이 0이면 해당 모터 그룹 정지.
 - 회전 방향 변경 시 한 패킷 동안 중립 정지 후 역방향 적용.
@@ -769,7 +769,7 @@ python main.py
 | Flutter 테스트 | 29개 통과 |
 | Android Debug APK | 빌드 성공 |
 | STM32 Debug CMake | 빌드 성공 |
-| 펌웨어 Flash 사용 | 71,456 B / 384 KiB, 약 18.17% |
+| 펌웨어 Flash 사용 | 71,420 B / 384 KiB, 약 18.16% |
 | 펌웨어 RAM 사용 | 28,944 B / 128 KiB, 약 22.08% |
 | 시뮬레이터 단위 테스트 | 13개 통과 |
 | PyBullet URDF DIRECT 로딩 | 성공 |

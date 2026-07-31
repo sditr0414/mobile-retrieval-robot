@@ -81,7 +81,7 @@ static void SetMotorDirection(GPIO_TypeDef *in1_port,
   HAL_GPIO_WritePin(in2_port, in2_pin, in2);
 }
 
-/* 앱의 0~255 속도를 TIM3의 0~999 Compare 값으로 바꾼다. */
+/* 앱의 0~255 속도를 TIM2의 0~999 Compare 값으로 바꾼다. */
 static uint32_t ScalePwm(uint8_t pwm)
 {
   if (pwm < MIN_PWM_THRESHOLD)
@@ -167,10 +167,10 @@ static void ApplyMotorOutput(uint8_t left_direction,
                     MOTOR_L_IN2_Pin,
                     left_direction,
                     (uint8_t)(left_compare != 0U));
-  SetMotorDirection(MOTOR_R_IN1_GPIO_Port,
-                    MOTOR_R_IN1_Pin,
-                    MOTOR_R_IN2_GPIO_Port,
-                    MOTOR_R_IN2_Pin,
+  SetMotorDirection(MOTOR_R_IN3_GPIO_Port,
+                    MOTOR_R_IN3_Pin,
+                    MOTOR_R_IN4_GPIO_Port,
+                    MOTOR_R_IN4_Pin,
                     right_direction,
                     (uint8_t)(right_compare != 0U));
   __HAL_TIM_SET_COMPARE(drive_timer, TIM_CHANNEL_1, left_compare);
@@ -426,8 +426,8 @@ void Drive4WD_Stop(void)
 {
   HAL_GPIO_WritePin(MOTOR_L_IN1_GPIO_Port, MOTOR_L_IN1_Pin, GPIO_PIN_RESET);
   HAL_GPIO_WritePin(MOTOR_L_IN2_GPIO_Port, MOTOR_L_IN2_Pin, GPIO_PIN_RESET);
-  HAL_GPIO_WritePin(MOTOR_R_IN1_GPIO_Port, MOTOR_R_IN1_Pin, GPIO_PIN_RESET);
-  HAL_GPIO_WritePin(MOTOR_R_IN2_GPIO_Port, MOTOR_R_IN2_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(MOTOR_R_IN3_GPIO_Port, MOTOR_R_IN3_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(MOTOR_R_IN4_GPIO_Port, MOTOR_R_IN4_Pin, GPIO_PIN_RESET);
 
   if (drive_timer != NULL)
   {

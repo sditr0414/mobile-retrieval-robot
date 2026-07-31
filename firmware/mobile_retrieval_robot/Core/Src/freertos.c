@@ -608,7 +608,7 @@ void StartDriveTask(void *argument) {
   uint32_t processed_imu_tick = 0U;
 
   (void)argument;
-  if (Drive4WD_Init(&htim3) != HAL_OK) {
+  if (Drive4WD_Init(&htim2) != HAL_OK) {
     Error_Handler();
   }
 

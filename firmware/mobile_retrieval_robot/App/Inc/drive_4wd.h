@@ -29,7 +29,7 @@ typedef struct
   uint8_t right_pwm;
 } DrivePidStatus;
 
-/* TIM3 PWM을 시작하고 모든 모터를 정지 상태로 만든다. */
+/* TIM2 PWM을 시작하고 모든 모터를 정지 상태로 만든다. */
 HAL_StatusTypeDef Drive4WD_Init(TIM_HandleTypeDef *timer);
 
 /* 앱의 0=전진, 1=후진 명령을 좌우 모터에 적용한다. */

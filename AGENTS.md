@@ -30,18 +30,18 @@ docs/       설계 기준
 |---|---|
 | PCA9685·MPU6050 | I2C1 PB8/PB9 |
 | HC-05 | USART1 PA9/PA10, 9600 8-N-1 |
-| L298N ENA/ENB | TIM3 PA6/PA7, 20 kHz |
-| L298N 방향 | PB6, PB7, PA8, PB10 |
+| L298N ENA/ENB | TIM2 PA0/PA1, 20 kHz |
+| L298N 방향 | PC0, PC1, PC2, PC3 |
 | PCA9685 채널 0~5 | Base, Shoulder, Elbow, Wrist Tilt, Wrist Rotate, Gripper |
 
 - HSE bypass 8 MHz, SYSCLK 100 MHz.
 - PCA9685는 50 Hz이며 `VCC`는 논리 전원, `V+`는 XL4015 서보 전원입니다.
 - 서보용·차량용 2S 팩의 양극은 분리하고 GND만 공통으로 연결합니다.
 - 서보·모터 고전류는 STM32 보드를 경유하지 않습니다.
-- PA6/PA7 PWM을 사용하므로 L298N ENA/ENB 점퍼를 제거합니다.
+- PA0/PA1 PWM을 사용하므로 L298N ENA/ENB 점퍼를 제거합니다.
 - PCA9685 `V+`–GND에 1000 µF 전해 커패시터를 사용합니다.
 - BMS, 퓨즈와 물리 비상정지는 현재 구성에 없습니다.
-- STM32 VIN용 DC-DC 모델·출력과 MPU6050 VCC는 확인 전까지 TODO입니다.
+- STM32 VIN용 DC-DC와 MPU6050 전원은 실물에 적용되어 있으며, 모델·출력값은 문서에 미기록 상태입니다.
 
 ## Bluetooth 기준
 
@@ -116,10 +116,10 @@ Flash 작업은 태스크 문맥에서만 수행합니다.
 - 앱·펌웨어의 16바이트 배열, 안전 인터록과 Flash 버전을 함께 확인합니다.
 - 변경 범위에 맞는 가장 작은 분석·테스트·빌드만 실행합니다.
 
-## 남은 실기 확인
+## 남은 실기 튜닝
 
-- XL4015 출력 전압과 STM32 VIN용 DC-DC
-- MPU6050 모듈 VCC와 장착 방향
-- L298N 전진 극성
 - Wrist Tilt 포함 관절별 안전 끝점
 - 실제 차체의 IMU 필터와 PID 계수
+
+전원, MPU6050 장착 방향과 L298N 전진 극성은 실물에 적용되어 있습니다.
+구체적인 전원 모델·출력값은 저장소 문서에 기록하지 않았습니다.
