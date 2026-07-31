@@ -29,7 +29,8 @@ Smartphone ── Bluetooth ── HC-05 ── UART ── STM32F411
 - Flutter 차량·로봇팔·티칭 UI
 - PyBullet 관절·패킷·PID 검증
 
-제외 범위: 초음파 센서, 휠 엔코더, 절대 Yaw, 역기구학과 XYZ 제어.
+발전 방향: 장애물 감지, 휠 엔코더 기반 정밀 주행, 절대 방향 보정,
+역기구학과 XYZ 제어.
 
 ## 시작
 

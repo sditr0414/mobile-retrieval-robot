@@ -15,7 +15,7 @@
 - 앱: Flutter Android, HC-05 Bluetooth Classic SPP
 - 시뮬레이터: PyBullet
 - 기능: 6채널 로봇팔, 4WD, 티칭, MPU6050 상대 Yaw PID
-- 제외: 초음파, 휠 엔코더, 절대 Yaw, 역기구학, XYZ 제어
+- 발전 방향: 장애물 감지, 휠 엔코더, 절대 방향 보정, 역기구학, XYZ 제어
 
 ```text
 app/        Flutter 앱

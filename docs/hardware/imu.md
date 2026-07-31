@@ -4,7 +4,7 @@
 
 | MPU6050 | NUCLEO-F411RE |
 |---|---|
-| VCC | 모듈 레귤레이터 확인 후 결정(TODO) |
+| VCC | 실물 적용, 공급전압 문서 미기록 |
 | GND | 공통 GND |
 | SCL / SDA | PB8 / PB9 |
 | AD0 | GND, 주소 `0x68` |
