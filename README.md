@@ -12,6 +12,12 @@ Smartphone ── Bluetooth ── HC-05 ── UART ── STM32F411
                                                └─ PWM/GPIO ── L298N ── DC Motor × 4
 ```
 
+## 최종 구성
+
+![전체 시스템 다이어그램](docs/hardware/system-diagram.png)
+
+![최종 하드웨어 배선도](docs/hardware/wiring-diagram.png)
+
 | 폴더 | 내용 |
 |---|---|
 | `app/` | Flutter Android 제어 앱 |

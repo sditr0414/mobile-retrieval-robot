@@ -70,6 +70,14 @@ flowchart LR
     MCU -->|내부 Flash| F[Sector 7 티칭·설정]
 ```
 
+### 최종 다이어그램
+
+![전체 시스템 다이어그램](docs/hardware/system-diagram.png)
+
+### 최종 배선도
+
+![최종 하드웨어 배선도](docs/hardware/wiring-diagram.png)
+
 ### 제어 흐름
 
 ```text
