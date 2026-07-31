@@ -9,7 +9,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  flutter_classic_bluetooth: ^0.1.5
+  flutter_classic_bluetooth: ^0.1.8
   flutter_joystick: ^0.2.2
   provider: ^6.1.2
 

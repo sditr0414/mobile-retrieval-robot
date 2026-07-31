@@ -1,0 +1,78 @@
+{
+  "simulation": {
+    "physics_dt_s": 0.004,
+    "control_dt_s": 0.02,
+    "gravity_m_s2": 0.0,
+    "arm_force_nm": 1.1,
+    "gripper_force_nm": 0.08,
+    "position_gain": 0.15,
+    "velocity_gain": 0.8,
+    "note": "Gravity remains disabled until link COM and inertia are physically verified."
+  },
+  "model": {
+    "urdf": "models/robot_arm.urdf",
+    "fixed_base": true
+  },
+  "joint_order": [
+    "base_yaw_joint",
+    "shoulder_joint",
+    "elbow_joint",
+    "wrist_tilt_joint",
+    "wrist_rotate_joint"
+  ],
+  "joint_profiles": {
+    "base_yaw_joint": {
+      "app_name": "Base",
+      "app_sign": -1.0,
+      "app_offset_deg": 0.0
+    },
+    "shoulder_joint": {
+      "app_name": "Shoulder",
+      "app_sign": -1.0,
+      "app_offset_deg": 0.0
+    },
+    "elbow_joint": {
+      "app_name": "Elbow",
+      "app_sign": 1.0,
+      "app_offset_deg": 0.0
+    },
+    "wrist_tilt_joint": {
+      "app_name": "Wrist Tilt",
+      "app_sign": -1.0,
+      "app_offset_deg": 0.0
+    },
+    "wrist_rotate_joint": {
+      "app_name": "Wrist Rotate",
+      "app_sign": -1.0,
+      "app_offset_deg": 0.0
+    }
+  },
+  "ui_limits_deg": [-90.0, 90.0],
+  "limits_verified": false,
+  "motion_profile": {
+    "max_velocity_deg_s": 180.0,
+    "max_acceleration_deg_s2": 360.0,
+    "max_jerk_deg_s3": 1440.0,
+    "simulation_only": true
+  },
+  "gripper": {
+    "app_name": "Gripper",
+    "open_percent": 0.0,
+    "closed_percent": 100.0,
+    "finger_1_open_rad": 0.0,
+    "finger_1_closed_rad": 0.25,
+    "finger_2_open_rad": 0.0,
+    "finger_2_closed_rad": -0.25,
+    "motion_profile": {
+      "max_velocity_rad_s": 1.5,
+      "max_acceleration_rad_s2": 4.0,
+      "max_jerk_rad_s3": 20.0,
+      "simulation_only": true
+    }
+  },
+  "poses": {
+    "origin_app_deg": [0.0, 0.0, 0.0, 0.0, 0.0],
+    "travel_app_deg": [0.0, -50.0, 90.0, 0.0, 60.0],
+    "startup_gripper_percent": 0.0
+  }
+}

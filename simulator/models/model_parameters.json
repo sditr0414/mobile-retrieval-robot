@@ -1,0 +1,30 @@
+{
+  "units": "SI",
+  "geometry": {
+    "base_height_m": 0.06,
+    "base_to_shoulder_m": 0.04,
+    "shoulder_to_elbow_m": 0.12,
+    "elbow_to_wrist_m": 0.12,
+    "wrist_to_tcp_m": 0.125,
+    "measurement_quantization_m": 0.005
+  },
+  "mass_source": "mass_properties.json",
+  "listed_assembly_mass_kg": 0.46122,
+  "joint_direction_from_firmware": {
+    "Base": "reversed",
+    "Shoulder": "reversed",
+    "Elbow": "normal",
+    "Wrist Tilt": "reversed",
+    "Wrist Rotate": "reversed",
+    "Gripper": "reversed"
+  },
+  "confidence": {
+    "printed_part_mass": "high: user measured",
+    "link_length": "medium: captured dimensions rounded to 5 mm",
+    "visual_alignment": "medium-high: assembled STL coordinates and images",
+    "center_of_mass_and_inertia": "medium-low: fixed simulation approximation, not for physical safety",
+    "collision_geometry": "low: fixed simplified simulation proxies, not for physical safety",
+    "joint_limits": "simulation UI limits only, not measured physical safety limits",
+    "gripper_coupling": "low-medium: opposite revolute approximation"
+  }
+}

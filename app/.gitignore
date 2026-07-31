@@ -3,6 +3,7 @@
 .flutter-plugins
 .flutter-plugins-dependencies
 .packages
+devtools_options.yaml
 build/
 android/local.properties
 ios/Flutter/Generated.xcconfig

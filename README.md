@@ -1,123 +1,59 @@
 # Mobile Retrieval Robot
 
-> **STM32F411 기반 5자유도 로봇팔 + 4WD 물품 회수·운반 이동 로봇**
+STM32F411 기반 5자유도 로봇팔과 4WD 이동 플랫폼입니다. Flutter 앱으로
+HC-05를 통해 차량, 로봇팔, 티칭과 상대 Yaw PID를 제어합니다.
 
-스마트폰 앱에서 Bluetooth로 로봇팔과 이동 플랫폼을 제어하는 팀 프로젝트입니다.
-
-## 최상위 폴더
-
-```text
-mobile-retrieval-robot/
-├─ app/        스마트폰 제어 앱
-├─ simulator/  PyBullet 로봇 시뮬레이터
-├─ firmware/   STM32F411 제어 코드
-├─ docs/       부품·배선·통신·협업 지침
-└─ README.md   프로젝트 전체 안내
-```
-
-## 1차 펌웨어 범위
-
-현재 1차 펌웨어에서는 아래 기능만 구현합니다.
-
-- HC-05 Bluetooth 명령 수신
-- 앱 기준 고정 11바이트 패킷과 128바이트 circular DMA 파싱
-- PCA9685 기반 로봇팔 서보 6채널 제어
-- L298N 기반 4WD 좌우 모터 제어
-- 12개 티칭 시퀀스의 내부 Flash 저장과 재생
-- Bluetooth 주행 명령 타임아웃 시 차량 정지
-- 잠금식 E-STOP과 명시적인 로봇팔 출력 활성화
-
-초음파 센서와 IMU는 후속 단계에서 추가합니다. 휠 엔코더는 사용하지 않습니다.
-
-## 주요 기능
-
-### 로봇팔
-
-- 6채널 서보 수동 제어
-- 저장 동작 실행
-- 앱에서 현재 자세를 웨이포인트로 추가
-- 전원이 꺼져도 유지되는 티칭 데이터 저장
-- 후속 단계에서 조이스틱 기반 XYZ 말단 위치 제어와 역기구학 추가
-- 후속 단계에서 전방 초음파 센서 기반 전개 안전 인터록 추가
-
-### 4WD 차량
-
-- 조이스틱 기반 전진·후진·회전·속도 제어
-- 주행 명령 100 ms heartbeat와 500 ms 펌웨어 타임아웃
-- 사용자 확인 전까지 유지되는 E-STOP 잠금
-- 후속 단계에서 IMU yaw 기반 방향 안정화 추가
-- 휠 엔코더와 엔코더 기반 거리·위치 제어는 사용하지 않음
-
-## 시스템 구성
-
-### 1차 구성
+## 구성
 
 ```text
-Smartphone App
-    │ Bluetooth Classic SPP
-    ▼
-HC-05 ── UART ── STM32F411
-                    ├─ I2C ── PCA9685 ── Servo × 6
-                    └─ PWM/GPIO ── L298N ── DC Motor × 4
+Smartphone ── Bluetooth ── HC-05 ── UART ── STM32F411
+                                               ├─ I2C ── PCA9685 ── Servo × 6
+                                               ├─ I2C ── MPU6050
+                                               └─ PWM/GPIO ── L298N ── DC Motor × 4
 ```
 
-### 후속 구성
+| 폴더 | 내용 |
+|---|---|
+| `app/` | Flutter Android 제어 앱 |
+| `firmware/` | STM32CubeMX CMake 펌웨어 |
+| `simulator/` | PyBullet 로봇팔 시뮬레이터 |
+| `docs/` | 하드웨어, 프로토콜, 협업 문서 |
 
-```text
-STM32F411
-├─ IMU → 방향 안정화
-└─ Ultrasonic Sensor → 전방 20 cm 미만 로봇팔 전개 금지
-```
+## 구현 상태
 
-## 로봇팔 전개 안전 조건
+- 고정 16바이트 Bluetooth 명령·ACK
+- PCA9685 6채널 서보와 S-curve 이동
+- L298N 4WD 제어, E-STOP, 500 ms 통신 타임아웃
+- 이름을 포함한 12개 티칭 시퀀스와 PID·서보 보정값의 Sector 7 저장
+- MPU6050 상대 Yaw와 직진·후진 방향 안정화 PID
+- Flutter 차량·로봇팔·티칭 UI
+- PyBullet 관절·패킷·PID 검증
 
-초음파 센서를 추가한 뒤 로봇팔 전개 명령은 아래 조건을 모두 만족할 때만 실행합니다.
+제외 범위: 초음파 센서, 휠 엔코더, 절대 Yaw, 역기구학과 XYZ 제어.
 
-- 차량 정지 상태
-- Bluetooth 비상정지 해제 상태
-- 초음파 측정값이 유효함
-- 전방 거리 20 cm 이상
-- 연속 측정값이 일정 횟수 이상 안전 판정
+## 시작
 
-설정값:
-
-```text
-전개 허용 거리: 20 cm 이상
-전개 금지 거리: 20 cm 미만
-측정 주기: 50~100 ms
-안전 판정: 연속 3회 이상
-센서 오류·시간 초과: 전개 금지
-```
-
-## 문서 바로가기
-
-- [프로젝트 부품 목록(BOM)](docs/hardware/bom.md)
-- [스마트폰 앱 안내](app/README.md)
-- [PyBullet 시뮬레이터 안내](simulator/README.md)
-- [STM32 펌웨어 안내](firmware/README.md)
-- [협업 가이드](docs/collaboration/CONTRIBUTING.md)
-- [협업 도구 안내](docs/collaboration/collaboration-tools.md)
-- [Pull Request 작성 양식](docs/collaboration/pull-request-template.md)
-- [STM32 권장 핀맵](docs/hardware/pin-map.md)
-- [Bluetooth 명령 프로토콜](docs/protocol/bluetooth-protocol.md)
-
-## 작업 시작
-
-```bash
+```powershell
 git clone https://github.com/sditr0414/mobile-retrieval-robot.git
 cd mobile-retrieval-robot
 git switch develop
-git pull
-git switch -c feature/작업이름
 ```
 
-스마트폰 앱은 `app/`, 시뮬레이터는 `simulator/`, STM32 코드는 `firmware/`,
-설계와 협업 지침은 `docs/`에서 관리합니다.
+- 앱: [app/README.md](app/README.md)
+- 펌웨어: [firmware/README.md](firmware/README.md)
+- 시뮬레이터: [simulator/README.md](simulator/README.md)
+- 부품과 전원: [docs/hardware/bom.md](docs/hardware/bom.md)
+- 핀맵: [docs/hardware/pin-map.md](docs/hardware/pin-map.md)
+- 서보 보정: [docs/hardware/servo-calibration.md](docs/hardware/servo-calibration.md)
+- IMU: [docs/hardware/imu.md](docs/hardware/imu.md)
+- Bluetooth 규격: [docs/protocol/bluetooth-protocol.md](docs/protocol/bluetooth-protocol.md)
+- 협업: [docs/collaboration/CONTRIBUTING.md](docs/collaboration/CONTRIBUTING.md)
 
-## 안전 원칙
+## 안전
 
-- 서보와 모터 전원을 STM32 보드에서 직접 공급하지 않습니다.
-- 모든 GND는 공통으로 연결하되 고전류 경로는 스타 접지로 분리합니다.
-- 차량 제어에는 500 ms 통신 타임아웃과 잠금식 비상정지를 구현합니다.
-- 로봇팔을 펼친 상태에서는 차량 최고 속도를 제한합니다.
-- 배선 변경 후 전원을 넣기 전에 다른 팀원이 검토합니다.
+- 서보와 모터 전원은 STM32에서 공급하지 않습니다.
+- 서보용·차량용 2S 팩의 양극은 분리하고 GND만 공통으로 연결합니다.
+- 고전류 귀환은 STM32 보드를 경유하지 않습니다.
+- 현재 BMS, 퓨즈와 물리 비상정지는 없습니다. 앱 E-STOP은 전원을 물리적으로
+  차단하지 않습니다.
+- 전원을 넣기 전에 배선, 관절 간섭과 작업 공간을 확인합니다.

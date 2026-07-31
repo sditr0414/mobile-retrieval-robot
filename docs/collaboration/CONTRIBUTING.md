@@ -1,67 +1,60 @@
 # 협업 가이드
 
-GitHub 작업은 **개인 브랜치 → Commit → Push → Pull Request → 검토 → develop 병합** 순서로 진행합니다.
+```text
+개인 브랜치 → Commit → Push → Pull Request → 검토 → develop
+```
 
-## 최초 설정
+## 시작
 
-```bash
+```powershell
 git clone https://github.com/sditr0414/mobile-retrieval-robot.git
 cd mobile-retrieval-robot
 git switch develop
 git pull
-```
-
-## 기능 브랜치 만들기
-
-```bash
 git switch -c feature/기능이름
 ```
 
-예시:
+브랜치 예: `feature/teaching`, `fix/bluetooth-timeout`, `docs/power-wiring`.
 
-```text
-feature/arm-servo-control
-feature/teaching-memory
-feature/vehicle-pid
-fix/bluetooth-timeout
-docs/power-wiring
-```
-
-## Commit 규칙
+## Commit
 
 | 접두어 | 용도 |
 |---|---|
-| `feat:` | 새 기능 |
-| `fix:` | 오류 수정 |
-| `docs:` | 문서 수정 |
-| `test:` | 시험 코드·결과 |
-| `refactor:` | 구조 개선 |
-| `chore:` | 설정 작업 |
+| `feat` | 기능 |
+| `fix` | 오류 |
+| `docs` | 문서 |
+| `test` | 시험 |
+| `refactor` | 구조 개선 |
+| `chore` | 설정 |
 
 ## Pull Request
 
-- 대상 브랜치: `develop`
-- 작업 목적과 주요 변경 내용을 작성합니다.
-- 하드웨어 연결 조건과 시험 결과를 기록합니다.
-- 최소 한 명의 검토 후 병합합니다.
+- 대상은 `develop`.
+- 목적, 변경, 시험 결과와 남은 위험을 기록.
+- 핀·전원 변경은 실제 연결 조건을 기록.
+- 실행하지 못한 시험은 이유를 기록.
+- 최소 한 명 검토 후 병합.
 
-## 코드 검토 기준
+## 확인
 
-- `docs/hardware/pin-map.md`와 핀이 일치하는가
-- `docs/protocol/bluetooth-protocol.md`와 명령 형식이 일치하는가
-- 모터 타임아웃과 비상정지가 유지되는가
-- 서보 제한각과 영점 보정이 적용되는가
-- Flash에 지나치게 자주 기록하지 않는가
-- 자동 생성 빌드 파일이 포함되지 않았는가
+- 핀맵과 `.ioc` 일치.
+- 앱·펌웨어의 16바이트 배열 일치.
+- E-STOP, 500 ms 타임아웃과 인터록 유지.
+- 서보 방향·보정 범위 유지.
+- Flash 버전·CRC·이전 데이터 변환 유지.
+- ACK 전에 앱이 성공을 표시하지 않음.
+- 생성된 빌드 결과물을 포함하지 않음.
 
-## 담당 영역
+```powershell
+cd app
+flutter analyze
+flutter test
+```
 
-| 영역 | 주 작업 위치 |
-|---|---|
-| 스마트폰 제어 앱 | `app/` |
-| PyBullet 시뮬레이터·로봇 모델 | `simulator/` |
-| STM32 및 로봇팔 제어 | `firmware/` |
-| 차량 주행·PID·IMU | `firmware/` |
-| 핀맵·배선·전원 | `docs/hardware/` |
-| Bluetooth 명령 | `docs/protocol/` |
-| 협업 절차 | `docs/collaboration/` |
+```powershell
+cd firmware/mobile_retrieval_robot
+cmake --preset Debug
+cmake --build --preset Debug
+```
+
+변경한 영역에 필요한 검사만 실행합니다.

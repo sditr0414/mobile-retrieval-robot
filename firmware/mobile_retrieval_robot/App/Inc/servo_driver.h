@@ -1,6 +1,9 @@
 #ifndef SERVO_DRIVER_H
 #define SERVO_DRIVER_H
 
+/* PCA9685 50 Hz PWM과 서보 펄스 변환 인터페이스. */
+
+#include "cmsis_os2.h"
 #include "stm32f4xx_hal.h"
 
 #define SERVO_DRIVER_CHANNEL_COUNT (16U)
@@ -13,6 +16,9 @@ typedef struct
   uint16_t center_pulse_us;
   uint16_t max_pulse_us;
 } ServoCalibration;
+
+/* PCA9685와 IMU가 공유하는 I2C 버스 mutex를 등록한다. */
+void ServoDriver_SetI2CMutex(osMutexId_t i2c_mutex);
 
 /* PCA9685를 50 Hz로 초기화하고 모든 채널을 정지한다. */
 HAL_StatusTypeDef ServoDriver_Init(I2C_HandleTypeDef *i2c);

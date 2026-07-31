@@ -7,7 +7,7 @@
     기준 길이: Base 60 mm, Base-Shoulder 40 mm,
     Shoulder-Elbow 120 mm, Elbow-Wrist 120 mm, Wrist-Gripper 125 mm.
     출력 부품과 서보의 나열 항목 합계는 461.22 g입니다.
-    TODO: 링크별 무게중심과 관성텐서를 확인한 뒤 inertial을 추가합니다.
+    링크별 관성과 충돌 형상은 시뮬레이션 근사값이며 실물 안전 판정에 사용하지 않습니다.
   -->
 
   <material name="base_gray">
@@ -24,6 +24,13 @@
   </material>
 
   <link name="base_link">
+    <!-- 질량은 실측, COM·관성·충돌 형상은 단순 원통 근사입니다. -->
+    <inertial>
+      <origin xyz="0 0 0.020" rpy="0 0 0"/>
+      <mass value="0.137140"/>
+      <inertia ixx="1.963e-4" ixy="0" ixz="0"
+               iyy="1.963e-4" iyz="0" izz="2.074e-4"/>
+    </inertial>
     <visual>
       <!-- 캡처의 앞뒤 방향에 맞춰 수직축으로 180도 보정합니다. -->
       <origin xyz="0 0 0" rpy="0 0 3.14159"/>
@@ -40,9 +47,19 @@
       </geometry>
       <material name="arm_blue"/>
     </visual>
+    <collision>
+      <origin xyz="0 0 0.020" rpy="0 0 0"/>
+      <geometry><cylinder radius="0.055" length="0.080"/></geometry>
+    </collision>
   </link>
 
   <link name="base_yaw_link">
+    <inertial>
+      <origin xyz="0.001113 0.005163 0.016565" rpy="0 0 0"/>
+      <mass value="0.114160"/>
+      <inertia ixx="8.132757157e-5" ixy="-2.417595347e-6" ixz="-7.328531391e-6"
+               iyy="9.536154170e-5" iyz="8.260441071e-6" izz="6.015328680e-5"/>
+    </inertial>
     <visual>
       <!-- 중심 높이 60 mm에서 X축 기준 -90도로 회전합니다. -->
       <origin xyz="-0.04078 -0.09288 0.14050" rpy="-1.5708 0 0"/>
@@ -51,6 +68,17 @@
       </geometry>
       <material name="arm_blue"/>
     </visual>
+    <visual>
+      <origin xyz="-0.04078 -0.09288 0.14050" rpy="-1.5708 0 0"/>
+      <geometry>
+        <mesh filename="shaft_cover.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="arm_white"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><cylinder radius="0.047" length="0.090"/></geometry>
+    </collision>
   </link>
 
   <joint name="base_yaw_joint" type="revolute">
@@ -58,11 +86,17 @@
     <child link="base_yaw_link"/>
     <origin xyz="0 0 0.060" rpy="0 0 0"/>
     <axis xyz="0 0 1"/>
-    <!-- TODO: 실제 기구 제한, 토크와 속도로 교체합니다. -->
+    <!-- 시뮬레이션 전용 제한이며 실제 기구의 안전 범위를 의미하지 않습니다. -->
     <limit lower="-1.5708" upper="1.5708" effort="1.0" velocity="1.0"/>
   </joint>
 
   <link name="shoulder_link">
+    <inertial>
+      <origin xyz="-0.000694 -0.000824 0.081211" rpy="0 0 0"/>
+      <mass value="0.099100"/>
+      <inertia ixx="1.730902777e-4" ixy="-2.048137834e-7" ixz="-5.415006315e-6"
+               iyy="1.822304764e-4" iyz="-1.548058402e-6" izz="1.810739401e-5"/>
+    </inertial>
     <visual>
       <!-- STL의 긴 Y축을 로봇의 위쪽 Z축으로 회전합니다. -->
       <origin xyz="-0.02843 0.08043 -0.16353" rpy="1.5708 0 0"/>
@@ -71,6 +105,10 @@
       </geometry>
       <material name="arm_blue"/>
     </visual>
+    <collision>
+      <origin xyz="0 0 0.060" rpy="0 0 0"/>
+      <geometry><box size="0.038 0.026 0.135"/></geometry>
+    </collision>
   </link>
 
   <joint name="shoulder_joint" type="revolute">
@@ -78,11 +116,17 @@
     <child link="shoulder_link"/>
     <origin xyz="0 0 0.040" rpy="0 0 0"/>
     <axis xyz="0 1 0"/>
-    <!-- TODO: 실제 기구 제한, 토크와 속도로 교체합니다. -->
+    <!-- 시뮬레이션 전용 제한이며 실제 기구의 안전 범위를 의미하지 않습니다. -->
     <limit lower="-1.5708" upper="1.5708" effort="1.0" velocity="1.0"/>
   </joint>
 
   <link name="elbow_link">
+    <inertial>
+      <origin xyz="0.073480 0.001403 0.000108" rpy="0 0 0"/>
+      <mass value="0.040770"/>
+      <inertia ixx="8.112721811e-6" ixy="8.549514339e-8" ixz="4.954417907e-6"
+               iyy="4.733136395e-5" iyz="-4.310091129e-8" izz="4.450906377e-5"/>
+    </inertial>
     <visual>
       <!-- 링크 축 기준 90도와 앞뒤 180도 방향을 함께 보정합니다. -->
       <origin xyz="0.05558 0.10534 0.29243" rpy="-1.5708 0 3.14159"/>
@@ -91,6 +135,17 @@
       </geometry>
       <material name="arm_white"/>
     </visual>
+    <visual>
+      <origin xyz="0.05558 0.10534 0.29243" rpy="-1.5708 0 3.14159"/>
+      <geometry>
+        <mesh filename="servo_retainer.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="arm_blue"/>
+    </visual>
+    <collision>
+      <origin xyz="0.060 0 0" rpy="0 0 0"/>
+      <geometry><box size="0.114 0.034 0.045"/></geometry>
+    </collision>
   </link>
 
   <joint name="elbow_joint" type="revolute">
@@ -98,11 +153,17 @@
     <child link="elbow_link"/>
     <origin xyz="0 0 0.1200" rpy="0 0 0"/>
     <axis xyz="0 1 0"/>
-    <!-- TODO: 실제 기구 제한, 토크와 속도로 교체합니다. -->
+    <!-- 시뮬레이션 전용 제한이며 실제 기구의 안전 범위를 의미하지 않습니다. -->
     <limit lower="-1.5708" upper="1.5708" effort="1.0" velocity="1.0"/>
   </joint>
 
   <link name="wrist_tilt_link">
+    <inertial>
+      <origin xyz="0.002825 -0.003864 0.002145" rpy="0 0 0"/>
+      <mass value="0.025150"/>
+      <inertia ixx="4.584678966e-6" ixy="1.079316470e-6" ixz="-2.312389030e-6"
+               iyy="1.407381760e-5" iyz="2.809507332e-7" izz="1.319986230e-5"/>
+    </inertial>
     <visual>
       <!-- 현재 방향에서 Y축 기준 180도로 회전합니다. -->
       <origin xyz="-0.07843 -0.10537 -0.30556" rpy="1.5708 0 3.14159"/>
@@ -111,6 +172,17 @@
       </geometry>
       <material name="arm_white"/>
     </visual>
+    <visual>
+      <origin xyz="-0.07843 -0.10537 -0.30556" rpy="1.5708 0 3.14159"/>
+      <geometry>
+        <mesh filename="gripper_cover.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="arm_blue"/>
+    </visual>
+    <collision>
+      <origin xyz="0.020 -0.002 0" rpy="0 0 0"/>
+      <geometry><box size="0.095 0.044 0.042"/></geometry>
+    </collision>
   </link>
 
   <joint name="wrist_tilt_joint" type="revolute">
@@ -118,11 +190,17 @@
     <child link="wrist_tilt_link"/>
     <origin xyz="0.120 0 0" rpy="0 0 0"/>
     <axis xyz="0 1 0"/>
-    <!-- TODO: 실제 기구 제한, 토크와 속도로 교체합니다. -->
+    <!-- 시뮬레이션 전용 제한이며 실제 기구의 안전 범위를 의미하지 않습니다. -->
     <limit lower="-1.5708" upper="1.5708" effort="1.0" velocity="1.0"/>
   </joint>
 
   <link name="wrist_rotate_link">
+    <inertial>
+      <origin xyz="0.017649 0.007816 -0.002994" rpy="0 0 0"/>
+      <mass value="0.021440"/>
+      <inertia ixx="4.068782823e-6" ixy="-2.661084501e-7" ixz="-1.421389073e-6"
+               iyy="8.313140452e-6" iyz="-4.793172245e-7" izz="8.939468435e-6"/>
+    </inertial>
     <visual>
       <!-- 그리퍼 끝이 손목에서 약 125 mm가 되도록 원본 조립 좌표를 맞춥니다. -->
       <origin xyz="-0.04800 0.19300 -0.01750" rpy="0 0 3.14159"/>
@@ -131,6 +209,10 @@
       </geometry>
       <material name="arm_white"/>
     </visual>
+    <collision>
+      <origin xyz="0.020 0 0.002" rpy="0 0 0"/>
+      <geometry><box size="0.078 0.036 0.036"/></geometry>
+    </collision>
   </link>
 
   <joint name="wrist_rotate_joint" type="revolute">
@@ -139,11 +221,17 @@
     <!-- 그리퍼 전체를 링크 축 기준 왼쪽 90도로 보정합니다. -->
     <origin xyz="0 0 0" rpy="-1.5708 0 0"/>
     <axis xyz="1 0 0"/>
-    <!-- TODO: 실제 기구 제한, 토크와 속도로 교체합니다. -->
+    <!-- 시뮬레이션 전용 제한이며 실제 기구의 안전 범위를 의미하지 않습니다. -->
     <limit lower="-1.5708" upper="1.5708" effort="1.0" velocity="1.0"/>
   </joint>
 
   <link name="gripper_finger_1_link">
+    <inertial>
+      <origin xyz="0.029076 -0.000567 -0.000355" rpy="0 0 0"/>
+      <mass value="0.011850"/>
+      <inertia ixx="6.835793869e-7" ixy="-3.998533803e-7" ixz="-3.469091725e-7"
+               iyy="8.926460291e-6" iyz="8.228794120e-9" izz="8.837422244e-6"/>
+    </inertial>
     <visual>
       <origin xyz="-0.09417 0.19450 -0.00547" rpy="0 0 3.14159"/>
       <geometry>
@@ -165,16 +253,29 @@
       </geometry>
       <material name="gripper_dark"/>
     </visual>
+    <collision>
+      <origin xyz="0.047 0 -0.002" rpy="0 0 0"/>
+      <geometry><box size="0.064 0.016 0.016"/></geometry>
+    </collision>
   </link>
 
-  <joint name="gripper_finger_1_joint" type="fixed">
+  <joint name="gripper_finger_1_joint" type="revolute">
     <parent link="wrist_rotate_link"/>
     <child link="gripper_finger_1_link"/>
     <origin xyz="0.04617 -0.00150 -0.01204" rpy="0 0 0"/>
-    <!-- TODO: 기어와 4절 링크의 실제 회전 중심을 확인한 뒤 가동 관절로 변경합니다. -->
+    <axis xyz="0 1 0"/>
+    <!-- 시각화용 근사값이며 실제 4절 링크 안전 범위가 아닙니다. -->
+    <limit lower="-0.18" upper="0.25" effort="0.08" velocity="3.0"/>
+    <dynamics damping="0.004" friction="0.002"/>
   </joint>
 
   <link name="gripper_finger_2_link">
+    <inertial>
+      <origin xyz="0.030123 -0.000773 0.000841" rpy="0 0 0"/>
+      <mass value="0.011610"/>
+      <inertia ixx="6.583439517e-7" ixy="-3.514502567e-7" ixz="2.814713817e-7"
+               iyy="8.323498475e-6" iyz="-9.071897384e-9" izz="8.244677863e-6"/>
+    </inertial>
     <visual>
       <origin xyz="-0.09395 0.19419 -0.02934" rpy="0 0 3.14159"/>
       <geometry>
@@ -196,13 +297,35 @@
       </geometry>
       <material name="gripper_dark"/>
     </visual>
+    <collision>
+      <origin xyz="0.047 0 0.002" rpy="0 0 0"/>
+      <geometry><box size="0.064 0.016 0.016"/></geometry>
+    </collision>
   </link>
 
-  <joint name="gripper_finger_2_joint" type="fixed">
+  <joint name="gripper_finger_2_joint" type="revolute">
     <parent link="wrist_rotate_link"/>
     <child link="gripper_finger_2_link"/>
     <origin xyz="0.04595 -0.00119 0.01184" rpy="0 0 0"/>
-    <!-- TODO: 기어와 4절 링크의 실제 회전 중심을 확인한 뒤 가동 관절로 변경합니다. -->
+    <axis xyz="0 1 0"/>
+    <!-- 반대쪽 링크를 소프트웨어에서 반대 방향으로 함께 움직입니다. -->
+    <limit lower="-0.25" upper="0.18" effort="0.08" velocity="3.0"/>
+    <dynamics damping="0.004" friction="0.002"/>
+  </joint>
+
+  <!-- FK/IK와 TCP 궤적 표시에서 사용하는 끝단 기준점입니다. -->
+  <link name="tcp_link">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.000001"/>
+      <inertia ixx="1e-12" ixy="0" ixz="0"
+               iyy="1e-12" iyz="0" izz="1e-12"/>
+    </inertial>
+  </link>
+  <joint name="tcp_fixed_joint" type="fixed">
+    <parent link="wrist_rotate_link"/>
+    <child link="tcp_link"/>
+    <origin xyz="0.125 0 0" rpy="0 0 0"/>
   </joint>
 
 </robot>

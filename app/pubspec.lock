@@ -58,10 +58,10 @@ packages:
     dependency: "direct main"
     description:
       name: flutter_classic_bluetooth
-      sha256: "59c9a2f7fabf6326dcab07b6e1186cb83612967ac86d65bdcd76e5afb62b6ccf"
+      sha256: d546aa9bb653fb84244dfdaf438ff5a5b60e6eee70014c76fd8090027d4cf2c8
       url: "https://pub.dev"
     source: hosted
-    version: "0.1.5"
+    version: "0.1.8"
   flutter_joystick:
     dependency: "direct main"
     description:

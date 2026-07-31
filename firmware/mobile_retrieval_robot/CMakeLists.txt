@@ -49,6 +49,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     App/Src/robot_arm.c
     App/Src/drive_4wd.c
     App/Src/teaching_storage.c
+    App/Src/imu.c
 )
 
 # Add include paths

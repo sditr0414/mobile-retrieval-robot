@@ -68,7 +68,7 @@
 #define configTICK_RATE_HZ                       ((TickType_t)1000)
 #define configMAX_PRIORITIES                     ( 56 )
 #define configMINIMAL_STACK_SIZE                 ((uint16_t)128)
-#define configTOTAL_HEAP_SIZE                    ((size_t)20480)
+#define configTOTAL_HEAP_SIZE                    ((size_t)17408)
 #define configMAX_TASK_NAME_LEN                  ( 16 )
 #define configUSE_TRACE_FACILITY                 1
 #define configUSE_16_BIT_TICKS                   0
@@ -152,7 +152,17 @@ See http://www.FreeRTOS.org/RTOS-Cortex-M3-M4.html. */
 /* Normal assert() semantics without relying on the provision of an assert.h
 header file. */
 /* USER CODE BEGIN 1 */
-#define configASSERT( x ) if ((x) == 0) {taskDISABLE_INTERRUPTS(); for( ;; );}
+void Drive4WD_Stop(void);
+#define configASSERT(x)                                                       \
+  do {                                                                        \
+    if ((x) == 0) {                                                           \
+      /* Assert 문맥에서도 가능한 차량 GPIO/PWM 정지를 먼저 수행한다. */       \
+      Drive4WD_Stop();                                                        \
+      taskDISABLE_INTERRUPTS();                                               \
+      for (;;) {                                                              \
+      }                                                                       \
+    }                                                                         \
+  } while (0)
 /* USER CODE END 1 */
 
 /* Definitions that map the FreeRTOS port interrupt handlers to their CMSIS
