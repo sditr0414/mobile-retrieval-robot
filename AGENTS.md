@@ -28,7 +28,8 @@ docs/       설계 기준
 
 | 장치 | 연결 |
 |---|---|
-| PCA9685·MPU6050 | I2C1 PB8/PB9 |
+| PCA9685 | I2C1 PB8/PB9 |
+| MPU6050 | I2C3 PA8/PC9 |
 | HC-05 | USART1 PA9/PA10, 9600 8-N-1 |
 | L298N ENA/ENB | TIM2 PA0/PA1, 20 kHz |
 | L298N 방향 | PC0, PC1, PC2, PC3 |
@@ -103,8 +104,8 @@ docs/       설계 기준
 | IMU | BelowNormal | 512 words | 보정·20 ms 측정 |
 | Status | Low | 256 words | PID·IMU 상태 전송 |
 
-`armQueue` 8, `driveQueue` 4, `i2cMutex`, `flashMutex`를 사용합니다. Mutex와
-Flash 작업은 태스크 문맥에서만 수행합니다.
+`armQueue` 8, `driveQueue` 4, `i2cMutex`, `imuI2cMutex`, `flashMutex`를
+사용합니다. Mutex와 Flash 작업은 태스크 문맥에서만 수행합니다.
 
 ## 코드 변경 원칙
 

@@ -187,6 +187,16 @@ void main() {
       expect(RobotPacketCodec.isValid(commit), isTrue);
     });
 
+    test('IMU 영점 보정 요청과 ACK가 같은 요청 ID를 보존한다', () {
+      final request = RobotPacketCodec.build(3, <int>[8, 37]);
+      final response = RobotPacketCodec.build(3, <int>[8, 1, 0, 37]);
+
+      expect(request.sublist(2, 4), <int>[8, 37]);
+      expect(response.sublist(2, 6), <int>[8, 1, 0, 37]);
+      expect(RobotPacketCodec.isValid(request), isTrue);
+      expect(RobotPacketCodec.isValid(response), isTrue);
+    });
+
     test('범위를 벗어난 값은 패킷으로 만들지 않는다', () {
       expect(
         () => RobotPacketCodec.build(4, const <int>[]),

@@ -5,7 +5,7 @@
 
 /*
  * MPU6050의 가속도·자이로 값을 I2C로 읽고 영점과 저역통과 필터를 적용한다.
- * PCA9685와 I2C1을 공유하므로 모든 버스 접근은 공용 Mutex 안에서 수행한다.
+ * MPU6050 전용 I2C3 접근을 Mutex로 보호해 태스크 간 충돌을 막는다.
  */
 
 #define MPU6050_ADDRESS            (0x68U << 1)
@@ -19,8 +19,8 @@
 
 #define MPU6050_ACCEL_SCALE        (16384.0f)
 #define MPU6050_GYRO_SCALE         (131.0f)
-#define MPU6050_TIMEOUT_MS         (20U)
-#define MPU6050_PROBE_TIMEOUT_MS   (10U)
+#define MPU6050_TIMEOUT_MS         (1000U)
+#define MPU6050_PROBE_TIMEOUT_MS   (1000U)
 #define IMU_CALIBRATION_MAX_ERRORS (5U)
 
 /* F411 참조 프로젝트의 필터값이다. 실제 차체에서 다시 확인한다. */
@@ -228,7 +228,7 @@ HAL_StatusTypeDef IMU_Init(I2C_HandleTypeDef *i2c,
   }
   status = HAL_I2C_IsDeviceReady(imu_i2c,
                                  MPU6050_ADDRESS,
-                                 1U,
+                                 3U,
                                  MPU6050_PROBE_TIMEOUT_MS);
   UnlockI2C();
   if (status != HAL_OK)
@@ -238,7 +238,11 @@ HAL_StatusTypeDef IMU_Init(I2C_HandleTypeDef *i2c,
   }
 
   status = ReadRegisters(MPU6050_REG_WHO_AM_I, &who_am_i, 1U);
-  if ((status != HAL_OK) || (who_am_i != MPU6050_WHO_AM_I_VALUE))
+  if ((status != HAL_OK) ||
+      ((who_am_i != MPU6050_WHO_AM_I_VALUE) &&
+       (who_am_i != 0x70U) &&
+       (who_am_i != 0x71U) &&
+       (who_am_i != 0x73U)))
   {
     RecordError();
     return HAL_ERROR;
@@ -296,6 +300,11 @@ HAL_StatusTypeDef IMU_CalibrateGyro(void)
   {
     return HAL_ERROR;
   }
+
+  primask = EnterStateCritical();
+  imu_latest.calibrated = 0U;
+  imu_latest.valid = 0U;
+  ExitStateCritical(primask);
 
   start_tick = osKernelGetTickCount();
   while ((osKernelGetTickCount() - start_tick) <

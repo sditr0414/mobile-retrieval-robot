@@ -76,6 +76,10 @@
 #define PID_TOGGLE_RESULT_OK          (0U)
 #define PID_TOGGLE_RESULT_UNAVAILABLE (1U)
 #define PID_TOGGLE_RESULT_INVALID_GAINS (2U)
+#define IMU_CALIBRATION_RESULT_OK          (0U)
+#define IMU_CALIBRATION_RESULT_UNAVAILABLE (1U)
+#define IMU_CALIBRATION_RESULT_BUSY        (2U)
+#define IMU_CALIBRATION_RESULT_READ        (3U)
 
 /* USER CODE END PD */
 
@@ -103,6 +107,7 @@ static const osThreadAttr_t statusTask_attributes = {
 
 static uint8_t settings_upload[SETTINGS_SERIALIZED_SIZE];
 static uint8_t settings_upload_parts;
+static volatile uint8_t imu_calibration_request_id;
 
 /* USER CODE END Variables */
 /* Definitions for bluetoothTask */
@@ -135,6 +140,9 @@ const osMessageQueueAttr_t driveQueue_attributes = {.name = "driveQueue"};
 /* Definitions for i2cMutex */
 osMutexId_t i2cMutexHandle;
 const osMutexAttr_t i2cMutex_attributes = {.name = "i2cMutex"};
+/* Definitions for imuI2cMutex */
+osMutexId_t imuI2cMutexHandle;
+const osMutexAttr_t imuI2cMutex_attributes = {.name = "imuI2cMutex"};
 /* Definitions for flashMutex */
 osMutexId_t flashMutexHandle;
 const osMutexAttr_t flashMutex_attributes = {.name = "flashMutex"};
@@ -198,6 +206,9 @@ void MX_FREERTOS_Init(void) {
   i2cMutexHandle = osMutexNew(&i2cMutex_attributes);
   ServoDriver_SetI2CMutex(i2cMutexHandle);
 
+  /* creation of imuI2cMutex */
+  imuI2cMutexHandle = osMutexNew(&imuI2cMutex_attributes);
+
   /* creation of flashMutex */
   flashMutexHandle = osMutexNew(&flashMutex_attributes);
 
@@ -247,6 +258,7 @@ void MX_FREERTOS_Init(void) {
 
   /* RTOS 객체 생성 실패 상태로 장치를 구동하지 않는다. */
   if ((i2cMutexHandle == NULL) ||
+      (imuI2cMutexHandle == NULL) ||
       (flashMutexHandle == NULL) ||
       (armQueueHandle == NULL) ||
       (driveQueueHandle == NULL) ||
@@ -639,7 +651,9 @@ void StartDriveTask(void *argument) {
 
 /* MPU6050 연결을 재시도하고 성공하면 영점 보정 후 20 ms 주기로 읽는다. */
 static void StartImuTask(void *argument) {
+  HAL_StatusTypeDef status;
   uint8_t consecutive_errors;
+  uint8_t request_id;
   uint32_t next_tick;
 
   (void)argument;
@@ -650,7 +664,13 @@ static void StartImuTask(void *argument) {
    */
   for (;;) {
     Drive4WD_SetImuAvailable(0U);
-    if (IMU_Init(&hi2c1, i2cMutexHandle) != HAL_OK) {
+    if (IMU_Init(&hi2c3, imuI2cMutexHandle) != HAL_OK) {
+      request_id = imu_calibration_request_id;
+      if (request_id != 0U) {
+        imu_calibration_request_id = 0U;
+        (void)Bluetooth_SendImuCalibrationAck(
+            0U, IMU_CALIBRATION_RESULT_UNAVAILABLE, request_id);
+      }
       osDelay(IMU_RETRY_INTERVAL_MS);
       continue;
     }
@@ -658,6 +678,12 @@ static void StartImuTask(void *argument) {
     Drive4WD_SetImuCalibrationInhibit(1U);
     if (IMU_CalibrateGyro() != HAL_OK) {
       Drive4WD_SetImuCalibrationInhibit(0U);
+      request_id = imu_calibration_request_id;
+      if (request_id != 0U) {
+        imu_calibration_request_id = 0U;
+        (void)Bluetooth_SendImuCalibrationAck(
+            0U, IMU_CALIBRATION_RESULT_READ, request_id);
+      }
       osDelay(IMU_RETRY_INTERVAL_MS);
       continue;
     }
@@ -667,6 +693,26 @@ static void StartImuTask(void *argument) {
     consecutive_errors = 0U;
     next_tick = osKernelGetTickCount();
     while (consecutive_errors < 3U) {
+      request_id = imu_calibration_request_id;
+      if (request_id != 0U) {
+        Drive4WD_SetImuAvailable(0U);
+        Drive4WD_SetImuCalibrationInhibit(1U);
+        status = IMU_CalibrateGyro();
+        Drive4WD_SetImuCalibrationInhibit(0U);
+        imu_calibration_request_id = 0U;
+        if (status != HAL_OK) {
+          (void)Bluetooth_SendImuCalibrationAck(
+              0U, IMU_CALIBRATION_RESULT_READ, request_id);
+          break;
+        }
+        Drive4WD_SetImuAvailable(1U);
+        consecutive_errors = 0U;
+        next_tick = osKernelGetTickCount();
+        (void)Bluetooth_SendImuCalibrationAck(
+            1U, IMU_CALIBRATION_RESULT_OK, request_id);
+        continue;
+      }
+
       if (IMU_Read() == HAL_OK) {
         consecutive_errors = 0U;
       } else {
@@ -837,6 +883,7 @@ static uint16_t CalculateSettingsCrc(const uint8_t *data, uint8_t length) {
 
 /* Mode 3 조회·조각 저장·미리보기 명령을 태스크 문맥에서 처리한다. */
 static void HandleSettingsCommand(const BluetoothArmCommand *command) {
+  IMU_Data imu;
   RobotSettings settings;
   RobotSettings previous;
   RobotArmResult arm_result;
@@ -852,6 +899,22 @@ static void HandleSettingsCommand(const BluetoothArmCommand *command) {
   uint8_t travel_joint;
   uint8_t travel_pose_valid;
   uint8_t result = SETTINGS_RESULT_INVALID;
+
+  if (command->data[0] == BLUETOOTH_SETTINGS_IMU_CALIBRATE) {
+    uint8_t reason = IMU_CALIBRATION_RESULT_OK;
+    if ((IMU_GetLatest(&imu) == 0U) || (imu.initialized == 0U)) {
+      reason = IMU_CALIBRATION_RESULT_UNAVAILABLE;
+    } else if (imu_calibration_request_id != 0U) {
+      reason = IMU_CALIBRATION_RESULT_BUSY;
+    } else {
+      imu_calibration_request_id = command->data[1];
+      return;
+    }
+    (void)Bluetooth_SendImuCalibrationAck(0U,
+                                          reason,
+                                          command->data[1]);
+    return;
+  }
 
   if (command->data[0] == BLUETOOTH_SETTINGS_PID_ENABLE) {
     DrivePidResult pid_result =

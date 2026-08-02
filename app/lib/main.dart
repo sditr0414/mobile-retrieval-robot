@@ -195,6 +195,9 @@ class BluetoothController with ChangeNotifier {
   bool deviceImuInitialized = false;
   bool deviceImuCalibrated = false;
   bool deviceImuValid = false;
+  bool _imuInitializationFailureAnnounced = false;
+  bool _imuCalibrationStartedAnnounced = false;
+  bool _imuCalibrationCompletedAnnounced = false;
   double deviceTemperatureC = 0;
   double deviceGyroZDps = 0;
   double deviceYaw = 0;
@@ -225,6 +228,7 @@ class BluetoothController with ChangeNotifier {
   Completer<bool>? _estopClearCompleter;
   Completer<bool>? _teachingPlayCompleter;
   Completer<bool>? _pidToggleCompleter;
+  Completer<bool>? _imuCalibrationCompleter;
   Completer<String?>? _teachingNameCompleter;
   Completer<List<List<int>>?>? _teachingSequenceCompleter;
   bool _armActivationPending = false;
@@ -240,6 +244,9 @@ class BluetoothController with ChangeNotifier {
   int? _teachingPlaySequence;
   int? _pendingSettingsRequestId;
   int? _pendingPidToggleRequestId;
+  bool? _pendingPidToggleValue;
+  int? _pendingImuCalibrationRequestId;
+  bool _imuCalibrationObservedRunning = false;
   int? _pendingPreviewRequestId;
   int? _pendingPreviewJoint;
   int? _pendingPreviewPulseUs;
@@ -518,6 +525,9 @@ class BluetoothController with ChangeNotifier {
       armCommandBusy = false;
       settingsLoaded = false;
       pidApplied = false;
+      _imuInitializationFailureAnnounced = false;
+      _imuCalibrationStartedAnnounced = false;
+      _imuCalibrationCompletedAnnounced = false;
       notifyListeners();
 
       await _inputSubscription?.cancel();
@@ -601,6 +611,15 @@ class BluetoothController with ChangeNotifier {
         deviceRightPwm = packet[13];
         _lastPidStatusAt = DateTime.now();
         hasFreshPidStatus = true;
+        if (_pidToggleCompleter?.isCompleted == false &&
+            pidApplied == _pendingPidToggleValue) {
+          lastAckSucceeded = true;
+          lastAckIsWarning = false;
+          lastAckMessage = pidApplied
+              ? '방향 안정화 PID가 활성화되었습니다.'
+              : '방향 안정화 PID가 비활성화되었습니다.';
+          _pidToggleCompleter!.complete(true);
+        }
         notifyListeners();
       } else if (packet[1] == 0 && packet[2] == 4) {
         final int flags = packet[3];
@@ -611,6 +630,35 @@ class BluetoothController with ChangeNotifier {
         deviceGyroZDps = _readInt16Le(packet, 6) / 100;
         deviceYaw = _readInt16Le(packet, 8) / 100;
         deviceImuErrorCount = _readUint32Le(packet, 10);
+        if (_imuCalibrationCompleter?.isCompleted == false) {
+          if (deviceImuInitialized && !deviceImuCalibrated) {
+            _imuCalibrationObservedRunning = true;
+          } else if (_imuCalibrationObservedRunning &&
+              deviceImuCalibrated &&
+              deviceImuValid) {
+            _imuCalibrationCompleter!.complete(true);
+          }
+        }
+        if (deviceImuCalibrated && !_imuCalibrationCompletedAnnounced) {
+          _imuCalibrationCompletedAnnounced = true;
+          lastAckSucceeded = true;
+          lastAckIsWarning = false;
+          lastAckMessage = 'IMU 보정 완료 · PID를 사용할 수 있습니다.';
+        } else if (deviceImuInitialized &&
+            !deviceImuCalibrated &&
+            !_imuCalibrationStartedAnnounced) {
+          _imuCalibrationStartedAnnounced = true;
+          lastAckSucceeded = true;
+          lastAckIsWarning = true;
+          lastAckMessage = 'IMU 초기화 완료 · 3초간 차량을 움직이지 마세요.';
+        } else if (!deviceImuInitialized &&
+            deviceImuErrorCount > 0 &&
+            !_imuInitializationFailureAnnounced) {
+          _imuInitializationFailureAnnounced = true;
+          lastAckSucceeded = false;
+          lastAckIsWarning = false;
+          lastAckMessage = 'IMU 초기화 실패 · 전원과 I2C 연결을 확인하세요.';
+        }
         _lastImuStatusAt = DateTime.now();
         hasFreshImuStatus = true;
         notifyListeners();
@@ -735,6 +783,24 @@ class BluetoothController with ChangeNotifier {
               (_teachingResetCompleter?.isCompleted == false)) {
             _teachingResetCompleter!.complete(succeeded);
           }
+        }
+        notifyListeners();
+      } else if (packet[1] == 3 &&
+          packet[2] == 8 &&
+          packet[5] == _pendingImuCalibrationRequestId) {
+        final bool succeeded = packet[3] == 1;
+        final int reason = packet[4];
+        lastAckSucceeded = succeeded;
+        lastAckIsWarning = false;
+        lastAckMessage = succeeded
+            ? 'IMU 영점 보정 완료 · PID를 적용합니다.'
+            : reason == 1
+            ? 'IMU가 연결되지 않아 영점 보정을 시작하지 못했습니다.'
+            : reason == 2
+            ? 'IMU 영점 보정이 이미 진행 중입니다.'
+            : 'IMU 측정 오류로 영점 보정에 실패했습니다.';
+        if (_imuCalibrationCompleter?.isCompleted == false) {
+          _imuCalibrationCompleter!.complete(succeeded);
         }
         notifyListeners();
       } else if (packet[1] == 3 &&
@@ -1004,6 +1070,9 @@ class BluetoothController with ChangeNotifier {
     _lastArmTransactionId = null;
     _pendingSettingsRequestId = null;
     _pendingPidToggleRequestId = null;
+    _pendingPidToggleValue = null;
+    _pendingImuCalibrationRequestId = null;
+    _imuCalibrationObservedRunning = false;
     _pendingPreviewRequestId = null;
     _pendingPreviewJoint = null;
     _pendingPreviewPulseUs = null;
@@ -1019,6 +1088,32 @@ class BluetoothController with ChangeNotifier {
     settingsBusy = false;
     servoPreviewMoving = false;
     pidApplied = false;
+    hasFreshPidStatus = false;
+    deviceCommandActive = false;
+    devicePidRunning = false;
+    devicePidReverse = false;
+    deviceTargetUpdated = false;
+    deviceImuAvailable = false;
+    deviceTargetYaw = 0;
+    deviceCurrentYaw = 0;
+    devicePidError = 0;
+    devicePidOutput = 0;
+    deviceLeftPwm = 0;
+    deviceRightPwm = 0;
+    hasFreshImuStatus = false;
+    deviceImuInitialized = false;
+    deviceImuCalibrated = false;
+    deviceImuValid = false;
+    deviceTemperatureC = 0;
+    deviceGyroZDps = 0;
+    deviceYaw = 0;
+    deviceImuErrorCount = 0;
+    _lastPidStatusAt = null;
+    _lastImuStatusAt = null;
+    _previousPidDriveDirection = 0;
+    _imuInitializationFailureAnnounced = false;
+    _imuCalibrationStartedAnnounced = false;
+    _imuCalibrationCompletedAnnounced = false;
     _receiveBuffer.clear();
 
     for (final pending in _writeQueue) {
@@ -1051,6 +1146,9 @@ class BluetoothController with ChangeNotifier {
     }
     if (_pidToggleCompleter?.isCompleted == false) {
       _pidToggleCompleter!.complete(false);
+    }
+    if (_imuCalibrationCompleter?.isCompleted == false) {
+      _imuCalibrationCompleter!.complete(false);
     }
     if (_teachingNameCompleter?.isCompleted == false) {
       _teachingNameCompleter!.complete(null);
@@ -1303,6 +1401,16 @@ class BluetoothController with ChangeNotifier {
       return;
     }
 
+    if (mode == 3 && data.length >= 2 && data[0] == 8) {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      if (isFeaturePreviewMode) {
+        _handleIncomingData(
+          Uint8List.fromList(RobotPacketCodec.build(3, [8, 1, 0, data[1]])),
+        );
+      }
+      return;
+    }
+
     if (mode == 3 && data.length >= 6 && data[0] == 5) {
       final int joint = data[1];
       final int pulseUs = data[2] | (data[3] << 8);
@@ -1446,11 +1554,21 @@ class BluetoothController with ChangeNotifier {
     final Completer<bool> completer = Completer<bool>();
     _estopClearCompleter = completer;
     try {
-      await sendCommand(0, data: [0, 0, 0, 0, 2]);
-      final bool succeeded = await completer.future.timeout(
-        const Duration(seconds: 2),
-        onTimeout: () => false,
-      );
+      bool succeeded = false;
+      for (
+        int attempt = 0;
+        attempt < 3 && !succeeded && isConnected;
+        attempt++
+      ) {
+        await sendCommand(0, data: [0, 0, 0, 0, 2], urgent: true);
+        try {
+          succeeded = await completer.future.timeout(
+            const Duration(milliseconds: 700),
+          );
+        } on TimeoutException {
+          // STOP 해제는 멱등 명령이므로 ACK 유실 시 같은 안전 명령을 재전송한다.
+        }
+      }
       isEstopLatched = !succeeded;
       if (!succeeded) {
         lastAckSucceeded = false;
@@ -1946,16 +2064,50 @@ class BluetoothController with ChangeNotifier {
     await stopDrive();
     settingsBusy = true;
     lastAckMessage = null;
-    final int requestId = _nextSettingsRequestId;
-    _nextSettingsRequestId = (_nextSettingsRequestId % 0xFF) + 1;
-    _pendingPidToggleRequestId = requestId;
-    final Completer<bool> completer = Completer<bool>();
-    _pidToggleCompleter = completer;
     notifyListeners();
 
+    int? calibrationRequestId;
+    int? pidRequestId;
+    Completer<bool>? calibrationCompleter;
+    Completer<bool>? pidCompleter;
     try {
-      await sendCommand(3, data: [7, enabled ? 1 : 0, requestId]);
-      final bool succeeded = await completer.future.timeout(
+      if (enabled) {
+        calibrationRequestId = _nextSettingsRequestId;
+        _nextSettingsRequestId = (_nextSettingsRequestId % 0xFF) + 1;
+        _pendingImuCalibrationRequestId = calibrationRequestId;
+        _imuCalibrationObservedRunning = false;
+        calibrationCompleter = Completer<bool>();
+        _imuCalibrationCompleter = calibrationCompleter;
+        _imuCalibrationStartedAnnounced = false;
+        _imuCalibrationCompletedAnnounced = false;
+        lastAckSucceeded = true;
+        lastAckIsWarning = true;
+        lastAckMessage = 'IMU 영점 보정 중 · 3초간 차량을 움직이지 마세요.';
+        notifyListeners();
+
+        await sendCommand(3, data: [8, calibrationRequestId]);
+        final bool calibrated = await calibrationCompleter.future.timeout(
+          const Duration(seconds: 10),
+          onTimeout: () => false,
+        );
+        if (!calibrated) {
+          if (lastAckMessage == null || lastAckSucceeded) {
+            lastAckSucceeded = false;
+            lastAckIsWarning = false;
+            lastAckMessage = 'IMU 영점 보정 ACK를 받지 못했습니다.';
+          }
+          return false;
+        }
+      }
+
+      pidRequestId = _nextSettingsRequestId;
+      _nextSettingsRequestId = (_nextSettingsRequestId % 0xFF) + 1;
+      _pendingPidToggleRequestId = pidRequestId;
+      _pendingPidToggleValue = enabled;
+      pidCompleter = Completer<bool>();
+      _pidToggleCompleter = pidCompleter;
+      await sendCommand(3, data: [7, enabled ? 1 : 0, pidRequestId]);
+      final bool succeeded = await pidCompleter.future.timeout(
         const Duration(seconds: 2),
         onTimeout: () => false,
       );
@@ -1969,11 +2121,18 @@ class BluetoothController with ChangeNotifier {
       lastAckMessage = 'PID 적용 상태 변경 전송 실패: $error';
       return false;
     } finally {
-      if (identical(_pidToggleCompleter, completer)) {
+      if (identical(_imuCalibrationCompleter, calibrationCompleter)) {
+        _imuCalibrationCompleter = null;
+      }
+      if (_pendingImuCalibrationRequestId == calibrationRequestId) {
+        _pendingImuCalibrationRequestId = null;
+      }
+      if (identical(_pidToggleCompleter, pidCompleter)) {
         _pidToggleCompleter = null;
       }
-      if (_pendingPidToggleRequestId == requestId) {
+      if (_pendingPidToggleRequestId == pidRequestId) {
         _pendingPidToggleRequestId = null;
+        _pendingPidToggleValue = null;
       }
       settingsBusy = false;
       notifyListeners();
@@ -3355,6 +3514,7 @@ class JoystickTab extends StatefulWidget {
 }
 
 class _JoystickTabState extends State<JoystickTab> {
+  static const int _maxDrivePwm = 220;
   Timer? _heartbeatTimer;
   BluetoothController? _controller;
   int _leftDirection = 0;
@@ -3447,9 +3607,9 @@ class _JoystickTabState extends State<JoystickTab> {
 
     setState(() {
       _leftDirection = leftSpeed >= 0 ? 0 : 1;
-      _leftPwm = (leftSpeed.abs() * 255).round();
+      _leftPwm = (leftSpeed.abs() * _maxDrivePwm).round();
       _rightDirection = rightSpeed >= 0 ? 0 : 1;
-      _rightPwm = (rightSpeed.abs() * 255).round();
+      _rightPwm = (rightSpeed.abs() * _maxDrivePwm).round();
     });
     if (controller.isHoldingPayload && !controller.isDriveReady) {
       if ((_leftPwm > 0 || _rightPwm > 0) &&

@@ -10,13 +10,22 @@
 
 | 장치 핀 | STM32 | 조건 |
 |---|---|---|
-| PCA9685 SCL / MPU6050 SCL | PB8 | `I2C1_SCL_PCA_IMU` |
-| PCA9685 SDA / MPU6050 SDA | PB9 | `I2C1_SDA_PCA_IMU` |
+| PCA9685 SCL | PB8 | `I2C1_SCL_PCA9685` |
+| PCA9685 SDA | PB9 | `I2C1_SDA_PCA9685` |
+
+PCA9685 주소는 `0x40`, 통신 속도는 100 kHz입니다.
+
+## I2C3
+
+| 장치 핀 | STM32 | 조건 |
+|---|---|---|
+| MPU6050 SCL | PA8 | `I2C3_SCL_IMU` |
+| MPU6050 SDA | PC9 | `I2C3_SDA_IMU` |
 | MPU6050 AD0 | GND | 주소 `0x68` |
 | MPU6050 INT | 미연결 | 20 ms polling |
 | MPU6050 VCC | 실물 적용 | 공급전압 문서 미기록 |
 
-PCA9685 주소는 `0x40`입니다. 두 모듈의 pull-up과 논리 전압은 실물에서
+통신 속도는 100 kHz입니다. 두 모듈의 pull-up과 논리 전압은 실물에서 각각
 확인합니다.
 
 ## Bluetooth

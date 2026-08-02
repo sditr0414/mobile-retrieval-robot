@@ -38,6 +38,7 @@
 #define BLUETOOTH_SETTINGS_PREVIEW    (5U)
 #define BLUETOOTH_SETTINGS_PREVIEW_STOP (6U)
 #define BLUETOOTH_SETTINGS_PID_ENABLE (7U)
+#define BLUETOOTH_SETTINGS_IMU_CALIBRATE (8U)
 
 /* 앱에서 받은 좌우 모터 명령과 수신 시각을 전달한다. */
 typedef struct
@@ -125,9 +126,14 @@ HAL_StatusTypeDef Bluetooth_SendPreviewResult(uint8_t joint,
 
 /* 방향 PID 활성화/비활성화 요청 결과와 실제 적용 상태를 전송한다. */
 HAL_StatusTypeDef Bluetooth_SendPidAck(uint8_t status,
-                                      uint8_t pid_applied,
-                                      uint8_t reason,
-                                      uint8_t request_id);
+                                       uint8_t pid_applied,
+                                       uint8_t reason,
+                                       uint8_t request_id);
+
+/* MPU6050 영점 보정 완료 여부를 요청 ID와 함께 전송한다. */
+HAL_StatusTypeDef Bluetooth_SendImuCalibrationAck(uint8_t status,
+                                                  uint8_t reason,
+                                                  uint8_t request_id);
 
 /* 방향 PID의 실제 실행 상태를 고정 16바이트 상태 패킷으로 전송한다. */
 HAL_StatusTypeDef Bluetooth_SendPidStatus(uint8_t flags,

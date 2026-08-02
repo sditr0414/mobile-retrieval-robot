@@ -267,7 +267,12 @@ static uint8_t IsSettingsDataValid(const uint8_t *data)
   {
     return ((data[1] <= 1U) &&
             (data[2] != 0U) &&
-            (IsUnusedDataZero(data, 3U) != 0U));
+             (IsUnusedDataZero(data, 3U) != 0U));
+  }
+
+  if (data[0] == BLUETOOTH_SETTINGS_IMU_CALIBRATE)
+  {
+    return ((data[1] != 0U) && (IsUnusedDataZero(data, 2U) != 0U));
   }
 
   return 0U;
@@ -855,6 +860,29 @@ HAL_StatusTypeDef Bluetooth_SendPidAck(uint8_t status,
   packet[4] = pid_applied;
   packet[5] = reason;
   packet[6] = request_id;
+  packet[CHECKSUM_INDEX] = CalculateChecksum(packet);
+  packet[TAIL_INDEX] = PACKET_TAIL;
+
+  return TransmitPacket(packet);
+}
+
+HAL_StatusTypeDef Bluetooth_SendImuCalibrationAck(uint8_t status,
+                                                  uint8_t reason,
+                                                  uint8_t request_id)
+{
+  uint8_t packet[BLUETOOTH_PACKET_SIZE] = {0U};
+
+  if ((bluetooth_uart == NULL) || (status > 1U) || (request_id == 0U))
+  {
+    return HAL_ERROR;
+  }
+
+  packet[0] = PACKET_HEADER;
+  packet[1] = BLUETOOTH_MODE_SETTINGS;
+  packet[2] = BLUETOOTH_SETTINGS_IMU_CALIBRATE;
+  packet[3] = status;
+  packet[4] = reason;
+  packet[5] = request_id;
   packet[CHECKSUM_INDEX] = CalculateChecksum(packet);
   packet[TAIL_INDEX] = PACKET_TAIL;
 

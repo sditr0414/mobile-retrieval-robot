@@ -514,9 +514,10 @@ void Drive4WD_SetImuAvailable(uint8_t available)
 {
   imu_available = (available != 0U) ? 1U : 0U;
   pid_status.imu_available = imu_available;
-  if (imu_available == 0U)
+  if ((imu_available == 0U) && (pid_enabled != 0U))
   {
     pid_enabled = 0U;
+    pid_status.pid_enabled = 0U;
     command_received = 0U;
     fresh_drive_command_required = 1U;
     drive_inhibit_release_tick = HAL_GetTick();

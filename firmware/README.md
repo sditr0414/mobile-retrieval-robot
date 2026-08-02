@@ -33,7 +33,8 @@ mobile_retrieval_robot/
 | HSE / SYSCLK | 8 MHz bypass / 100 MHz |
 | USART1 | PA9/PA10, 9600 8-N-1 |
 | RX DMA | DMA2 Stream2, Circular, 128바이트 버퍼 |
-| I2C1 | PB8/PB9, 100 kHz |
+| I2C1 | PCA9685, PB8/PB9, 100 kHz |
+| I2C3 | MPU6050, PA8/PC9, 100 kHz |
 | TIM2 | PSC=4, ARR=999, PA0/PA1, 20 kHz |
 | 모터 초기 출력 | GPIO/PWM 모두 0 |
 
@@ -50,8 +51,8 @@ PCA9685가 서보 PWM 50 Hz를 생성합니다. PA2/PA3와 MPU6050 INT는 사용
 | IMU | BelowNormal | 3초 보정과 20 ms 측정 |
 | Status | Low | PID·IMU 상태 송신 |
 
-PCA9685와 MPU6050은 `i2cMutex`, Flash는 `flashMutex`로 직렬화합니다. ISR은
-파싱, 제어와 Flash 작업을 하지 않습니다.
+PCA9685는 `i2cMutex`, MPU6050은 `imuI2cMutex`, Flash는 `flashMutex`로
+직렬화합니다. ISR은 파싱, 제어와 Flash 작업을 하지 않습니다.
 
 ## 제어와 안전
 
