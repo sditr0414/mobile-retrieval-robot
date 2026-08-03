@@ -2,6 +2,10 @@
 
 현재 `.ioc`와 펌웨어 기준입니다.
 
+## STM32 핀 배치
+
+![STM32F411RE CubeMX 핀 배치](stm32-pinout.png)
+
 ## 최종 배선도
 
 ![최종 하드웨어 배선도](wiring-diagram.png)

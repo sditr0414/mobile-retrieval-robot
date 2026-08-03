@@ -58,8 +58,10 @@ git switch develop
 - 시뮬레이터: [simulator/README.md](simulator/README.md)
 - 부품과 전원: [docs/hardware/bom.md](docs/hardware/bom.md)
 - 핀맵: [docs/hardware/pin-map.md](docs/hardware/pin-map.md)
+- PCA9685·S-curve: [docs/hardware/servo-control.md](docs/hardware/servo-control.md)
 - 서보 보정: [docs/hardware/servo-calibration.md](docs/hardware/servo-calibration.md)
 - IMU: [docs/hardware/imu.md](docs/hardware/imu.md)
+- 상대 Yaw PID: [docs/hardware/yaw-pid.md](docs/hardware/yaw-pid.md)
 - Bluetooth 규격: [docs/protocol/bluetooth-protocol.md](docs/protocol/bluetooth-protocol.md)
 - 협업: [docs/collaboration/CONTRIBUTING.md](docs/collaboration/CONTRIBUTING.md)
 

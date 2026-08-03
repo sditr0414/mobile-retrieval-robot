@@ -1,5 +1,8 @@
 # MPU6050
 
+상대 Yaw PID의 수식, 적용 조건과 튜닝은
+[상대 Yaw PID 제어 문서](yaw-pid.md)를 참고합니다.
+
 ## 연결
 
 | MPU6050 | NUCLEO-F411RE |

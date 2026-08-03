@@ -115,4 +115,6 @@ cmake --build --preset Debug
 
 관련 문서: [핀맵](../docs/hardware/pin-map.md),
 [서보 보정](../docs/hardware/servo-calibration.md),
-[IMU](../docs/hardware/imu.md).
+[PCA9685·S-curve](../docs/hardware/servo-control.md),
+[IMU](../docs/hardware/imu.md),
+[상대 Yaw PID](../docs/hardware/yaw-pid.md).

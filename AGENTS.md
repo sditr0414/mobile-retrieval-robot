@@ -5,7 +5,9 @@
 - 핀·전원: `docs/hardware/pin-map.md`
 - 부품: `docs/hardware/bom.md`
 - 서보 실측값: `docs/hardware/servo-calibration.md`
+- PCA9685·S-curve: `docs/hardware/servo-control.md`
 - IMU: `docs/hardware/imu.md`
+- 상대 Yaw PID: `docs/hardware/yaw-pid.md`
 - Bluetooth 바이트 배열: `docs/protocol/bluetooth-protocol.md`
 
 ## 프로젝트

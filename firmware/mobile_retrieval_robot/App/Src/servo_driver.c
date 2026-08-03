@@ -2,7 +2,7 @@
 
 /*
  * PCA9685를 50 Hz로 초기화하고 각 채널의 서보 펄스폭을 설정한다.
- * IMU와 같은 I2C1 버스를 사용하므로 모든 통신은 공용 Mutex로 직렬화한다.
+ * PCA9685 전용 I2C1 버스의 통신을 Mutex로 직렬화한다.
  */
 
 #define PCA9685_ADDRESS       (0x40U << 1)
@@ -26,7 +26,7 @@
 static I2C_HandleTypeDef *servo_i2c;
 static osMutexId_t servo_i2c_mutex;
 
-/* 공용 I2C Mutex를 획득해 다른 센서의 전송과 겹치지 않게 한다. */
+/* PCA9685 I2C Mutex를 획득해 여러 태스크의 전송이 겹치지 않게 한다. */
 static HAL_StatusTypeDef LockI2C(void)
 {
   if (servo_i2c_mutex == NULL)
@@ -40,7 +40,7 @@ static HAL_StatusTypeDef LockI2C(void)
              : HAL_TIMEOUT;
 }
 
-/* PCA9685 전송이 끝난 뒤 공용 I2C Mutex를 반환한다. */
+/* PCA9685 전송이 끝난 뒤 I2C Mutex를 반환한다. */
 static void UnlockI2C(void)
 {
   (void)osMutexRelease(servo_i2c_mutex);

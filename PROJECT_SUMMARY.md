@@ -174,6 +174,8 @@ XL4015 출력과 STM32 VIN용 DC-DC는 실물에 배선·적용되어 있습니�
 
 ## 5. STM32 핀 배치
 
+![STM32F411RE CubeMX 핀 배치](docs/hardware/stm32-pinout.png)
+
 ### I2C1
 
 | 기능 | STM32 핀 | 연결 |
@@ -458,6 +460,8 @@ MPU6050에는 자력계가 없습니다. 따라서 장시간 누적 오차가 �
 방향을 유지하지 않습니다. 각 직진·후진 구간에서 시작 방향을 유지하는 용도입니다.
 
 ## 10. Bluetooth 통신 규격
+
+![Bluetooth 16바이트 패킷 요약](docs/protocol/bluetooth-packet-summary.png)
 
 ### 공통 16바이트 프레임
 
@@ -879,6 +883,8 @@ python main.py
 - 시뮬레이터: [simulator/README.md](simulator/README.md)
 - 부품: [docs/hardware/bom.md](docs/hardware/bom.md)
 - 핀맵: [docs/hardware/pin-map.md](docs/hardware/pin-map.md)
+- PCA9685·S-curve: [docs/hardware/servo-control.md](docs/hardware/servo-control.md)
 - 서보 보정: [docs/hardware/servo-calibration.md](docs/hardware/servo-calibration.md)
 - IMU: [docs/hardware/imu.md](docs/hardware/imu.md)
+- 상대 Yaw PID: [docs/hardware/yaw-pid.md](docs/hardware/yaw-pid.md)
 - Bluetooth: [docs/protocol/bluetooth-protocol.md](docs/protocol/bluetooth-protocol.md)
