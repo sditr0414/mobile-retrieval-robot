@@ -3,6 +3,8 @@
 STM32F411 기반 5자유도 로봇팔과 4WD 이동 플랫폼입니다. Flutter 앱으로
 HC-05를 통해 차량, 로봇팔, 티칭과 상대 Yaw PID를 제어합니다.
 
+[GitHub 저장소](https://github.com/sditr0414/mobile-retrieval-robot)
+
 [Canva 발표 자료](https://canva.link/0yyf17uj8df1qjl)
 
 [Notion 프로젝트 문서](https://app.notion.com/p/56bdbc6c27e2832ca4c20163aa6199b3)
