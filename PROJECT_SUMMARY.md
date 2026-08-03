@@ -878,3 +878,4 @@ python main.py
 - 서보 보정: [docs/hardware/servo-calibration.md](docs/hardware/servo-calibration.md)
 - IMU: [docs/hardware/imu.md](docs/hardware/imu.md)
 - Bluetooth: [docs/protocol/bluetooth-protocol.md](docs/protocol/bluetooth-protocol.md)
+- 발표 자료: [Canva 프레젠테이션](https://canva.link/0yyf17uj8df1qjl)
