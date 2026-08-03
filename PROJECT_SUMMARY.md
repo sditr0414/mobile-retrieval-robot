@@ -4,6 +4,8 @@
 > 모바일 물품 회수 로봇입니다. 이 문서는 발표와 최종 검수를 위한 단일 요약본이며,
 > 세부 구현의 최종 기준은 소스 코드와 `docs/` 원본 문서입니다.
 
+[Canva 발표 자료](https://canva.link/0yyf17uj8df1qjl)
+
 ## 1. 프로젝트 한눈에 보기
 
 | 항목 | 내용 |
@@ -878,4 +880,3 @@ python main.py
 - 서보 보정: [docs/hardware/servo-calibration.md](docs/hardware/servo-calibration.md)
 - IMU: [docs/hardware/imu.md](docs/hardware/imu.md)
 - Bluetooth: [docs/protocol/bluetooth-protocol.md](docs/protocol/bluetooth-protocol.md)
-- 발표 자료: [Canva 프레젠테이션](https://canva.link/0yyf17uj8df1qjl)

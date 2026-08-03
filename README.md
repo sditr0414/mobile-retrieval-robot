@@ -3,6 +3,8 @@
 STM32F411 기반 5자유도 로봇팔과 4WD 이동 플랫폼입니다. Flutter 앱으로
 HC-05를 통해 차량, 로봇팔, 티칭과 상대 Yaw PID를 제어합니다.
 
+[Canva 발표 자료](https://canva.link/0yyf17uj8df1qjl)
+
 ## 구성
 
 ```text
@@ -56,7 +58,6 @@ git switch develop
 - IMU: [docs/hardware/imu.md](docs/hardware/imu.md)
 - Bluetooth 규격: [docs/protocol/bluetooth-protocol.md](docs/protocol/bluetooth-protocol.md)
 - 협업: [docs/collaboration/CONTRIBUTING.md](docs/collaboration/CONTRIBUTING.md)
-- 발표 자료: [Canva 프레젠테이션](https://canva.link/0yyf17uj8df1qjl)
 
 ## 안전
 
