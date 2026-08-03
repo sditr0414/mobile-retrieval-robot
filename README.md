@@ -5,6 +5,8 @@ HC-05를 통해 차량, 로봇팔, 티칭과 상대 Yaw PID를 제어합니다.
 
 [Canva 발표 자료](https://canva.link/0yyf17uj8df1qjl)
 
+[Notion 프로젝트 문서](https://app.notion.com/p/56bdbc6c27e2832ca4c20163aa6199b3)
+
 ## 구성
 
 ```text

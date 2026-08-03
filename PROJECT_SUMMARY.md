@@ -6,6 +6,8 @@
 
 [Canva 발표 자료](https://canva.link/0yyf17uj8df1qjl)
 
+[Notion 프로젝트 문서](https://app.notion.com/p/56bdbc6c27e2832ca4c20163aa6199b3)
+
 ## 1. 프로젝트 한눈에 보기
 
 | 항목 | 내용 |
