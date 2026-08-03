@@ -12,6 +12,16 @@ class _TrackingBluetoothController extends BluetoothController {
   }
 }
 
+class _DelayedSequenceBluetoothController extends BluetoothController {
+  static const pose = <int>[100, 80, 70, 60, 50, 40];
+
+  @override
+  Future<List<List<int>>?> requestTeachingSequence(int sequenceId) async {
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    return [pose];
+  }
+}
+
 void main() {
   test('Flash가 없을 때 안전 서보 초기 펄스 배열을 사용한다', () {
     expect(RobotArmControlTab.jointNames, [
@@ -26,6 +36,10 @@ void main() {
     expect(BluetoothController().pidKpMilli, 2000);
     expect(BluetoothController().pidKiMilli, 1400);
     expect(BluetoothController().pidKdMilli, 0);
+    final thresholdController = BluetoothController();
+    expect(thresholdController.joystickThreshold, 0.10);
+    thresholdController.setJoystickThreshold(0.08);
+    expect(thresholdController.joystickThreshold, 0.08);
     expect(BluetoothController.servoReversed, [
       true,
       true,
@@ -107,8 +121,11 @@ void main() {
     controller.enableFeaturePreviewMode();
     controller.isEstopLatched = false;
     controller.isArmEnabled = true;
-    expect(teaching.addCurrentPose(<int>[90, 80, 70, 60, 50, 40]), isTrue);
+    const lastPose = <int>[90, 80, 70, 60, 50, 40];
+    RobotArmControlTab.setOriginPose();
+    expect(teaching.addCurrentPose(lastPose), isTrue);
     expect(await teaching.playOnSTM32(controller), isNull);
+    expect(RobotArmControlTab.currentAngles, lastPose);
     teaching.selectSequence(2);
     teaching.selectSequence(1);
     expect(teaching.currentWaypoints, isEmpty);
@@ -128,6 +145,27 @@ void main() {
     expect(await controller.prepareTravelSequencePreservingGripper(), isTrue);
     expect(controller.isDriveReady, isTrue);
     controller.dispose();
+  });
+
+  test('저장 시퀀스 조회부터 완료까지 재생을 잠그고 마지막 자세를 반영한다', () async {
+    final controller = _DelayedSequenceBluetoothController();
+    final teaching = TeachingController();
+    controller.enableFeaturePreviewMode();
+    controller.isEstopLatched = false;
+    controller.isArmEnabled = true;
+    RobotArmControlTab.setOriginPose();
+
+    final play = teaching.playSequenceOnSTM32(controller, 10);
+    expect(teaching.isPlaying, isTrue);
+    expect(await play, isNull);
+    expect(teaching.isPlaying, isFalse);
+    expect(
+      RobotArmControlTab.currentAngles,
+      _DelayedSequenceBluetoothController.pose,
+    );
+
+    controller.dispose();
+    teaching.dispose();
   });
 
   testWidgets('티칭 선택창에 고정 시퀀스 이름을 모두 표시한다', (tester) async {
@@ -578,6 +616,11 @@ void main() {
     );
     expect(scrollable.position.maxScrollExtent, 0);
     expect(tester.takeException(), isNull);
+
+    await tester.tap(find.byTooltip('PID 설정'));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('조이스틱 직진 판정 범위'), findsOneWidget);
+    expect(find.textContaining('|X|가 이 값 이하면'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(seconds: 1));

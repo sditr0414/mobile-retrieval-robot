@@ -7,8 +7,8 @@ HC-05를 통해 차량, 로봇팔, 티칭과 상대 Yaw PID를 제어합니다.
 
 ```text
 Smartphone ── Bluetooth ── HC-05 ── UART ── STM32F411
-                                               ├─ I2C ── PCA9685 ── Servo × 6
-                                               ├─ I2C ── MPU6050
+                                               ├─ I2C1 ── PCA9685 ── Servo × 6
+                                               ├─ I2C3 ── MPU6050
                                                └─ PWM/GPIO ── L298N ── DC Motor × 4
 ```
 
@@ -30,6 +30,7 @@ Smartphone ── Bluetooth ── HC-05 ── UART ── STM32F411
 - 고정 16바이트 Bluetooth 명령·ACK
 - PCA9685 6채널 서보와 S-curve 이동
 - L298N 4WD 제어, E-STOP, 500 ms 통신 타임아웃
+- 앱 최대 220 PWM과 조절 가능한 PID 직진 판정 범위
 - 이름을 포함한 12개 티칭 시퀀스와 PID·서보 보정값의 Sector 7 저장
 - MPU6050 상대 Yaw와 직진·후진 방향 안정화 PID
 - Flutter 차량·로봇팔·티칭 UI

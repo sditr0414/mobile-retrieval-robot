@@ -70,9 +70,13 @@ docs/       설계 기준
 - 티칭 화면 재생은 앱 편집본을 임시 RAM에 전송하며 Flash를 쓰지 않습니다.
 - 저장하지 않고 다른 시퀀스를 선택하면 편집본을 버리고 Flash 원본을 자동 조회합니다.
 - 차량 화면의 9~12번 전용 동작은 항상 Flash 저장본을 재생합니다.
+- 저장본 재생은 마지막 자세 조회부터 작업을 잠그며 조회 실패 시 재생하지 않습니다.
 - 일반 관절은 앱 `-90~+90°`, Gripper는 열림 `0%`~닫힘 `100%`.
 - 서보는 20 ms S-curve와 앱 속도 `50~100%`를 사용합니다.
 - 서보 위치는 측정값이 아니라 마지막 명령값입니다.
+- 시퀀스 완료 ACK 뒤 마지막 명령 자세를 수동 제어 화면에 반영합니다.
+- 앱 주행 PWM은 최대 `220`이며 PID 직진 판정 범위는 기본 `0.10`, 유지
+  히스테리시스는 `+0.04`입니다.
 
 ## IMU와 PID
 
@@ -104,8 +108,9 @@ docs/       설계 기준
 | IMU | BelowNormal | 512 words | 보정·20 ms 측정 |
 | Status | Low | 256 words | PID·IMU 상태 전송 |
 
-`armQueue` 8, `driveQueue` 4, `i2cMutex`, `imuI2cMutex`, `flashMutex`를
-사용합니다. Mutex와 Flash 작업은 태스크 문맥에서만 수행합니다.
+`armQueue` 8, `driveQueue` 4, PCA9685용 `i2cMutex`, MPU6050용
+`imuI2cMutex`, `flashMutex`를 사용합니다. Mutex와 Flash 작업은 태스크
+문맥에서만 수행합니다.
 
 ## 코드 변경 원칙
 

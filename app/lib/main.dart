@@ -144,6 +144,7 @@ class BluetoothController with ChangeNotifier {
   static const int defaultPidKpMilli = 2000;
   static const int defaultPidKiMilli = 1400;
   static const int defaultPidKdMilli = 0;
+  static const double defaultJoystickThreshold = 0.10;
 
   static const int packetSize = RobotPacketCodec.packetSize;
   static const int dataSize = RobotPacketCodec.dataSize;
@@ -207,6 +208,7 @@ class BluetoothController with ChangeNotifier {
   int pidKpMilli = defaultPidKpMilli;
   int pidKiMilli = defaultPidKiMilli;
   int pidKdMilli = defaultPidKdMilli;
+  double joystickThreshold = defaultJoystickThreshold;
   List<List<int>> servoCalibrationUs = defaultServoCalibrationUs
       .map((values) => List<int>.from(values))
       .toList();
@@ -273,6 +275,7 @@ class BluetoothController with ChangeNotifier {
   int? _previewSavedKpMilli;
   int? _previewSavedKiMilli;
   int? _previewSavedKdMilli;
+  double? _previewSavedJoystickThreshold;
   bool? _previewSavedSettingsLoaded;
   bool? _previewSavedPidApplied;
   List<List<int>>? _previewSavedCalibrationUs;
@@ -366,6 +369,7 @@ class BluetoothController with ChangeNotifier {
     _previewSavedKpMilli = pidKpMilli;
     _previewSavedKiMilli = pidKiMilli;
     _previewSavedKdMilli = pidKdMilli;
+    _previewSavedJoystickThreshold = joystickThreshold;
     _previewSavedSettingsLoaded = settingsLoaded;
     _previewSavedPidApplied = pidApplied;
     _previewSavedCalibrationUs = servoCalibrationUs
@@ -427,6 +431,7 @@ class BluetoothController with ChangeNotifier {
     pidKpMilli = _previewSavedKpMilli ?? pidKpMilli;
     pidKiMilli = _previewSavedKiMilli ?? pidKiMilli;
     pidKdMilli = _previewSavedKdMilli ?? pidKdMilli;
+    joystickThreshold = _previewSavedJoystickThreshold ?? joystickThreshold;
     settingsLoaded = _previewSavedSettingsLoaded ?? false;
     pidApplied = _previewSavedPidApplied ?? false;
     final savedCalibration = _previewSavedCalibrationUs;
@@ -443,6 +448,7 @@ class BluetoothController with ChangeNotifier {
     _previewSavedKpMilli = null;
     _previewSavedKiMilli = null;
     _previewSavedKdMilli = null;
+    _previewSavedJoystickThreshold = null;
     _previewSavedSettingsLoaded = null;
     _previewSavedPidApplied = null;
     _previewSavedCalibrationUs = null;
@@ -476,6 +482,19 @@ class BluetoothController with ChangeNotifier {
       _speedWarningShownForCurrentMotion = true;
     }
     servoSpeedPercent = normalized;
+    notifyListeners();
+  }
+
+  /// PID 직진으로 판단할 조이스틱 X축 중앙 범위를 앱 실행 중에 저장한다.
+  void setJoystickThreshold(double threshold) {
+    if (!threshold.isFinite) {
+      return;
+    }
+    final double normalized = threshold.clamp(0.0, 1.0).toDouble();
+    if (joystickThreshold == normalized) {
+      return;
+    }
+    joystickThreshold = normalized;
     notifyListeners();
   }
 
@@ -1735,6 +1754,18 @@ class BluetoothController with ChangeNotifier {
     );
   }
 
+  /// 완료된 동작의 마지막 명령 자세를 수동 제어 화면에 알린다.
+  void rememberCommandedArmPose(
+    List<int> pose, {
+    bool preserveGripper = false,
+  }) {
+    RobotArmControlTab.applyCommandedPose(
+      pose,
+      preserveGripper: preserveGripper,
+    );
+    notifyListeners();
+  }
+
   /// Flash의 이동 자세를 실행하며 현재 그리퍼 명령값을 유지한다.
   Future<bool> prepareTravelSequencePreservingGripper() async {
     if (!isConnected ||
@@ -2309,6 +2340,32 @@ class TeachingController with ChangeNotifier {
     return waypoints.isEmpty ? null : List<int>.from(waypoints.last);
   }
 
+  /// Flash 시퀀스의 마지막 자세를 필요할 때 한 번 읽어 앱에 보관한다.
+  Future<List<int>?> _loadLastPose(
+    BluetoothController bluetooth,
+    int sequence,
+  ) async {
+    final List<int>? cached = _loadedSequences.contains(sequence)
+        ? lastPoseForSequence(sequence)
+        : null;
+    if (cached != null) {
+      return cached;
+    }
+    final List<List<int>>? waypoints = await bluetooth.requestTeachingSequence(
+      sequence,
+    );
+    if (waypoints == null ||
+        waypoints.isEmpty ||
+        waypoints.any((pose) => !_isPoseValid(pose))) {
+      return null;
+    }
+    _savedSequenceWaypoints[sequence - 1]
+      ..clear()
+      ..addAll(waypoints.map((pose) => List<int>.from(pose)));
+    _loadedSequences.add(sequence);
+    return List<int>.from(waypoints.last);
+  }
+
   static String defaultSequenceName(int sequence) {
     return switch (sequence) {
       travelSequence => '이동 자세',
@@ -2622,6 +2679,7 @@ class TeachingController with ChangeNotifier {
     _savedSequenceWaypoints[_selectedSequence - 1]
       ..clear()
       ..addAll(currentWaypoints.map((pose) => List<int>.from(pose)));
+    _loadedSequences.add(_selectedSequence);
   }
 
   /// 모든 웨이포인트를 전반부·후반부 조각으로 나눠 STM32 Flash에 저장한다.
@@ -2738,7 +2796,11 @@ class TeachingController with ChangeNotifier {
         2,
         data: [7, sequenceId, bluetooth.servoSpeedPercent],
       );
-      return await ack ? null : '시퀀스 재생 실패 또는 완료 ACK 시간 초과입니다.';
+      final bool succeeded = await ack;
+      if (succeeded) {
+        bluetooth.rememberCommandedArmPose(waypoints.last);
+      }
+      return succeeded ? null : '시퀀스 재생 실패 또는 완료 ACK 시간 초과입니다.';
     } catch (error) {
       return '시퀀스 재생 전송 실패: $error';
     } finally {
@@ -2762,17 +2824,57 @@ class TeachingController with ChangeNotifier {
     if (sequenceId < 1 || sequenceId > sequenceCount) {
       return '잘못된 티칭 시퀀스 번호입니다.';
     }
-    final Future<bool> ack = bluetooth.waitForTeachingPlayAck(sequenceId);
     _playing = true;
     notifyListeners();
     try {
+      final List<int>? finalPose = await _loadLastPose(bluetooth, sequenceId);
+      if (finalPose == null) {
+        return 'STM32에서 시퀀스의 마지막 자세를 읽지 못했습니다.';
+      }
+      final Future<bool> ack = bluetooth.waitForTeachingPlayAck(sequenceId);
       await bluetooth.sendCommand(
         2,
         data: [2, sequenceId, bluetooth.servoSpeedPercent],
       );
-      return await ack ? null : '시퀀스 재생 실패 또는 완료 ACK 시간 초과입니다.';
+      final bool succeeded = await ack;
+      if (succeeded) {
+        bluetooth.rememberCommandedArmPose(finalPose);
+      }
+      return succeeded ? null : '시퀀스 재생 실패 또는 완료 ACK 시간 초과입니다.';
     } catch (error) {
       return '시퀀스 재생 전송 실패: $error';
+    } finally {
+      _playing = false;
+      notifyListeners();
+    }
+  }
+
+  /// Flash 이동 자세를 실행하고 현재 Gripper를 유지한 마지막 자세를 반영한다.
+  Future<bool> prepareTravelSequencePreservingGripper(
+    BluetoothController bluetooth,
+  ) async {
+    if (isBusy || !bluetooth.isConnected || !bluetooth.isArmEnabled) {
+      return false;
+    }
+    _playing = true;
+    notifyListeners();
+    try {
+      final List<int>? finalPose = await _loadLastPose(
+        bluetooth,
+        travelSequence,
+      );
+      if (finalPose == null) {
+        return false;
+      }
+      final bool reached = await bluetooth
+          .prepareTravelSequencePreservingGripper();
+      if (reached) {
+        bluetooth.rememberCommandedArmPose(finalPose, preserveGripper: true);
+      }
+      return reached;
+    } catch (error) {
+      debugPrint('이동 자세 조회 또는 실행 실패: $error');
+      return false;
     } finally {
       _playing = false;
       notifyListeners();
@@ -2997,6 +3099,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       return;
     }
 
+    final TeachingController teaching = context.read<TeachingController>();
     setState(() => _screenTransitionBusy = true);
     try {
       if (index != 0) {
@@ -3005,7 +3108,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         if (!mounted) {
           return;
         }
-        unawaited(context.read<TeachingController>().syncFromSTM32(bluetooth));
+        unawaited(teaching.syncFromSTM32(bluetooth));
         return;
       }
 
@@ -3031,8 +3134,9 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       if (bluetooth.isHoldingPayload) {
         bluetooth.beginPickupAction();
       }
-      final bool ready = await bluetooth
-          .prepareTravelSequencePreservingGripper();
+      final bool ready = await teaching.prepareTravelSequencePreservingGripper(
+        bluetooth,
+      );
       if (bluetooth.isHoldingPayload) {
         bluetooth.finishPickupAction(
           state: PickupWorkflowState.holding,
@@ -3589,7 +3693,9 @@ class _JoystickTabState extends State<JoystickTab> {
       context,
       listen: false,
     );
-    final double centerThreshold = _straightPidInput ? 0.14 : 0.10;
+    final double centerThreshold = _straightPidInput
+        ? (controller.joystickThreshold + 0.04).clamp(0.0, 1.0).toDouble()
+        : controller.joystickThreshold;
     _straightPidInput =
         controller.pidApplied &&
         forward.abs() > 0.05 &&
@@ -3657,10 +3763,12 @@ class _JoystickTabState extends State<JoystickTab> {
       return;
     }
 
+    final TeachingController teaching = context.read<TeachingController>();
     controller.beginPickupAction();
     await controller.stopDrive();
-    final bool ready = await controller
-        .prepareTravelSequencePreservingGripper();
+    final bool ready = await teaching.prepareTravelSequencePreservingGripper(
+      controller,
+    );
     if (!mounted) {
       return;
     }
@@ -3711,11 +3819,6 @@ class _JoystickTabState extends State<JoystickTab> {
       return;
     }
 
-    final List<int>? finalPose = teaching.lastPoseForSequence(sequenceId);
-    if (finalPose != null) {
-      RobotArmControlTab.currentAngles = finalPose;
-    }
-
     if (sequenceId == TeachingController.pickupPoseSequence) {
       controller.finishPickupAction(
         state: PickupWorkflowState.pickupPoseReady,
@@ -3733,8 +3836,9 @@ class _JoystickTabState extends State<JoystickTab> {
     }
 
     // 놓기 완료 후에는 열린 그리퍼 값을 유지한 채 이동 자세를 자동 실행한다.
-    final bool ready = await controller
-        .prepareTravelSequencePreservingGripper();
+    final bool ready = await teaching.prepareTravelSequencePreservingGripper(
+      controller,
+    );
     if (!mounted) {
       return;
     }
@@ -3768,7 +3872,8 @@ class _JoystickTabState extends State<JoystickTab> {
           content: Text(
             'P ${_formatPid(controller.pidKpMilli)} · '
             'I ${_formatPid(controller.pidKiMilli)} · '
-            'D ${_formatPid(controller.pidKdMilli)}\n'
+            'D ${_formatPid(controller.pidKdMilli)} · '
+            '직진 범위 ${controller.joystickThreshold.toStringAsFixed(2)}\n'
             '차량을 띄우거나 넓은 곳에서 시험하세요.',
           ),
           actions: [
@@ -3824,14 +3929,18 @@ class _JoystickTabState extends State<JoystickTab> {
       TextEditingController(text: _formatPid(controller.pidKiMilli)),
       TextEditingController(text: _formatPid(controller.pidKdMilli)),
     ];
+    final thresholdController = TextEditingController(
+      text: controller.joystickThreshold.toStringAsFixed(2),
+    );
 
-    final List<int>? values = await showDialog<List<int>>(
+    final ({List<int> pid, double threshold})?
+    values = await showDialog<({List<int> pid, double threshold})>(
       context: context,
       builder: (dialogContext) {
         String? errorText;
         return StatefulBuilder(
           builder: (context, setDialogState) => AlertDialog(
-            title: const Text('PID 설정'),
+            title: const Text('PID·조이스틱 설정'),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -3873,6 +3982,22 @@ class _JoystickTabState extends State<JoystickTab> {
                       ),
                     );
                   }),
+                  TextField(
+                    controller: thresholdController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                      signed: false,
+                    ),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(
+                        RegExp(r'^\d{0,1}(\.\d{0,2})?$'),
+                      ),
+                    ],
+                    decoration: const InputDecoration(
+                      labelText: '조이스틱 직진 판정 범위',
+                      helperText: '|X|가 이 값 이하면 PID 직진으로 판단 · 0.00~1.00',
+                    ),
+                  ),
                   if (errorText != null)
                     Text(errorText!, style: const TextStyle(color: Colors.red)),
                 ],
@@ -3924,7 +4049,22 @@ class _JoystickTabState extends State<JoystickTab> {
                     });
                     return;
                   }
-                  Navigator.pop(dialogContext, parsed);
+                  final double? threshold = double.tryParse(
+                    thresholdController.text.trim(),
+                  );
+                  if (threshold == null ||
+                      !threshold.isFinite ||
+                      threshold < 0 ||
+                      threshold > 1) {
+                    setDialogState(() {
+                      errorText = '조이스틱 직진 판정 범위는 0.00~1.00으로 입력해주세요.';
+                    });
+                    return;
+                  }
+                  Navigator.pop(dialogContext, (
+                    pid: parsed,
+                    threshold: threshold,
+                  ));
                 },
                 child: const Text('저장'),
               ),
@@ -3936,10 +4076,12 @@ class _JoystickTabState extends State<JoystickTab> {
     for (final field in controllers) {
       field.dispose();
     }
+    thresholdController.dispose();
 
     if (values == null || !mounted) {
       return;
     }
+    controller.setJoystickThreshold(values.threshold);
 
     /*
      * 실행 중인 제어기의 계수를 중간에 바꾸지 않는다.
@@ -3969,9 +4111,9 @@ class _JoystickTabState extends State<JoystickTab> {
       return;
     }
     final bool saved = await controller.saveSettings(
-      kpMilli: values[0],
-      kiMilli: values[1],
-      kdMilli: values[2],
+      kpMilli: values.pid[0],
+      kiMilli: values.pid[1],
+      kdMilli: values.pid[2],
       servoPulsesUs: controller.servoCalibrationUs,
       travelPose: controller.travelPoseAngles,
     );
@@ -3981,8 +4123,8 @@ class _JoystickTabState extends State<JoystickTab> {
         context,
         saved
             ? controller.isFeaturePreviewMode
-                  ? 'PID 값을 기능 확인용 메모리에 임시 저장했습니다.'
-                  : 'PID 값을 Flash에 저장했습니다.'
+                  ? 'PID와 조이스틱 범위를 기능 확인용 메모리에 저장했습니다.'
+                  : 'PID는 Flash, 조이스틱 범위는 앱에 저장했습니다.'
             : 'PID 값 저장에 실패했습니다.',
         backgroundColor: saved ? Colors.green : Colors.red,
       );
@@ -4353,7 +4495,8 @@ class _JoystickTabState extends State<JoystickTab> {
                     controller.settingsLoaded
                         ? 'P ${_formatPid(controller.pidKpMilli)}  ·  '
                               'I ${_formatPid(controller.pidKiMilli)}  ·  '
-                              'D ${_formatPid(controller.pidKdMilli)}'
+                              'D ${_formatPid(controller.pidKdMilli)}  ·  '
+                              '직진 ${controller.joystickThreshold.toStringAsFixed(2)}'
                         : 'PID 값 대기 중',
                     style: const TextStyle(
                       color: Colors.blueGrey,
@@ -4497,6 +4640,22 @@ class RobotArmControlTab extends StatefulWidget {
     currentAngles = List<int>.from(originPose);
   }
 
+  /// 완료 ACK를 받은 로봇팔 명령 자세를 수동 제어 화면에 반영한다.
+  static void applyCommandedPose(
+    List<int> pose, {
+    bool preserveGripper = false,
+  }) {
+    if (pose.length != jointCount ||
+        pose.any((value) => value < 0 || value > 180)) {
+      return;
+    }
+    final int gripper = currentAngles[gripperIndex];
+    currentAngles = List<int>.from(pose);
+    if (preserveGripper) {
+      currentAngles[gripperIndex] = gripper;
+    }
+  }
+
   /// 패킷의 0~180 값을 화면의 각도 또는 Gripper 퍼센트로 바꾼다.
   static int packetToDisplayValue(int index, int packetValue) {
     if (index == gripperIndex) {
@@ -4603,7 +4762,11 @@ class _RobotArmControlTabState extends State<RobotArmControlTab> {
 
   /// 그리퍼 위치를 유지하면서 Flash의 이동 자세를 실행한다.
   void _moveToTravel(BluetoothController controller) {
-    unawaited(controller.prepareTravelSequencePreservingGripper());
+    unawaited(
+      context.read<TeachingController>().prepareTravelSequencePreservingGripper(
+        controller,
+      ),
+    );
   }
 
   /// 화면의 관절 값을 패킷 값으로 갱신하고 최신 전체 자세를 전송한다.
